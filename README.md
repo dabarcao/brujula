@@ -29,9 +29,23 @@ Feedback anónimo entre compañeros, con orientación hacia la mejora.
 
 ## Base de datos
 
-El esquema inicial vive en `supabase/migrations/0001_initial_schema.sql`.
-Para aplicarlo, copia el contenido del archivo y pégalo en el SQL Editor del
-dashboard de Supabase (tu proyecto → SQL Editor → New query → pegar → Run).
+Hay dos archivos de migración en `supabase/migrations/`, y hay que aplicarlos
+**en orden** (0001 antes que 0002): copia el contenido de cada uno y pégalo
+en el SQL Editor del dashboard de Supabase (tu proyecto → SQL Editor → New
+query → pegar → Run), uno detrás de otro.
+
+- `0001_initial_schema.sql`: tablas principales y políticas de Row-Level
+  Security.
+- `0002_auth_bootstrap.sql`: función que crea la organización y da de alta
+  al primer administrador cuando alguien se registra desde `/signup`.
+
+### Confirmación de email
+
+Por defecto, Supabase exige confirmar el email antes de poder iniciar
+sesión. La app ya contempla ese caso (el nombre de la empresa queda
+guardado hasta la primera vez que el usuario confirma e inicia sesión), pero
+para probar más rápido durante el desarrollo puedes desactivarlo
+temporalmente en Authentication → Providers → Email → "Confirm email".
 
 El esquema incluye las tablas principales (organizations, members,
 feedback_requests, feedback_responses, etc.) y las políticas de
