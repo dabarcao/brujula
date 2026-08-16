@@ -15,6 +15,8 @@ El reto central del producto no es tanto la interfaz como la arquitectura de con
 - **Manager de equipo** (fase futura, no MVP): posible rol intermedio con visibilidad agregada solo de su equipo.
 - **Super-admin de plataforma** (vosotros, el proveedor): gestiona altas de empresas clientes, facturación, soporte, y el marco de competencias por defecto de la plataforma.
 
+> **Nota de implementación (piloto/desarrollo):** el modelo objetivo es que el alta de empresa la gestione el super-admin de plataforma, no la propia empresa. Mientras no haya clientes reales, el alta de empresa se deja como flujo self-service público (`/signup`, cualquiera puede crear una organización y queda como su admin), para agilizar el desarrollo. Antes de dar de alta al primer cliente externo, este flujo debe moverse dentro de un panel de super-admin y dejar de ser público.
+
 ## 3. Multi-tenancy
 
 Desde el primer día, la aplicación es multi-empresa: cada empresa cliente es un *tenant* aislado. Todo dato relevante cuelga de un `company_id`, y el aislamiento entre tenants se refuerza a nivel de base de datos (Row-Level Security), no solo a nivel de aplicación.
@@ -32,17 +34,35 @@ Pensado para evaluaciones periódicas (semestrales, por ejemplo). RRHH configura
 
 El empleado, dentro del ciclo, puede agrupar y organizar a sus evaluadores según estas categorías y su propio criterio (por ejemplo, para pedir feedback equilibrado entre categorías). Esta categorización se usa también para poder, en el futuro, segmentar insights por tipo de relación (aunque en el MVP el análisis puede tratarse de forma agregada, sin desglose por categoría, para no debilitar el anonimato en categorías con pocas personas).
 
+**Quién puede ser invitado:** para las categorías jefe/equipo/empresa, el evaluador tiene que ser ya un empleado dado de alta en la organización (ver sección "Alta de empleados" más abajo). La categoría "Otros" es la excepción: puede incluir a alguien externo a la organización, que no llega a ser miembro de la plataforma — le basta su email y el token de invitación de esa solicitud concreta para responder, sin necesidad de crear cuenta ni iniciar sesión.
+
 ### 4.2 Flujo ágil / espontáneo
 
-El empleado elige personas concretas (mínimo parametrizable, ver sección 6) y solicita feedback puntual y contextual — por ejemplo, sobre una presentación reciente. Este flujo es, ante todo, una herramienta de progresión individual: alimenta el perfil de competencias del empleado, pero por su naturaleza puntual y de bajo volumen pesa menos (o nada, según se decida) en las métricas agregadas de empresa, que se nutren principalmente del ciclo estructurado.
+El empleado elige personas concretas (mínimo parametrizable, ver sección 6) y solicita feedback puntual y contextual — por ejemplo, sobre una presentación reciente. Este flujo es, ante todo, una herramienta de progresión individual: alimenta el perfil de competencias del empleado, pero por su naturaleza puntual y de bajo volumen pesa menos (o nada, según se decida) en las métricas agregadas de empresa, que se nutren principalmente del ciclo estructurado. En el flujo ágil, el empleado elige entre compañeros ya dados de alta en la organización (no hay categoría "Otros" aquí, esa es propia del ciclo 360).
+
+### 4.3 Alta de empleados
+
+Los empleados no se dan de alta a sí mismos: los da de alta RRHH (admin de empresa), uno a uno, con nombre y email — la persona invitada recibe un correo para completar su registro (contraseña) y queda vinculada a esa organización. La carga masiva por archivo (CSV) queda fuera del MVP, como mejora de roadmap futuro (ver sección 14).
 
 Ambos flujos alimentan el mismo motor de análisis y el mismo mapa de competencias del empleado.
 
 ## 5. Tipos de feedback
 
-### 5.1 Texto libre
+Los tipos 5.1 y 5.2 comparten el mismo modelo subyacente: una **plantilla de preguntas**, donde cada pregunta tiene un tipo (`abierta`, `escala` u `opción múltiple`). Lo que distingue un "texto libre" de una "encuesta corta" no es la infraestructura, sino qué tipos de pregunta contiene la plantilla.
 
-Respuesta abierta, con o sin prompt orientativo. Para mejorar la calidad y utilidad del feedback recibido, la plataforma ofrece asistencia a quien lo escribe:
+### 5.1 Texto libre (plantilla guiada por defecto)
+
+En vez de una única caja de texto en blanco, el feedback libre usa una plantilla fija de preguntas abiertas, la misma para todas las empresas en el MVP (no editable por RRHH todavía):
+
+1. ¿Qué habilidad destacarías de esta persona en su desarrollo profesional?
+2. ¿Cuál crees que es un área de mejora para profundizar en su desarrollo profesional?
+3. ¿Qué es aquello que le invitarías a seguir haciendo?
+4. ¿Qué crees que podría ayudarle en su desarrollo profesional dejar de hacer?
+5. ¿Algo más que quieras añadir? (opcional, campo libre para lo que no encaje en las preguntas anteriores)
+
+Las preguntas son genéricas, no ligadas a una competencia concreta (por ejemplo, no se formulan específicamente sobre "liderazgo"): el motor de análisis clasifica cada respuesta contra el marco de competencias vigente (sección 7), igual que haría con un texto libre sin estructurar.
+
+Al responder cada pregunta, un asistente de IA ligero ayuda a quien escribe a construir una respuesta más precisa y útil para quien la solicita, en el momento (no confundir con el motor de análisis asíncrono de la sección 8, que procesa el feedback ya enviado):
 
 - Sugerencias de redacción para que el feedback sea más claro, concreto y accionable (evitando comentarios vagos o puramente valorativos sin ejemplos).
 - Sugerencia de competencias relacionadas con el texto, a modo de etiquetas (por ejemplo, `#comunicación`, `#gestión_del_tiempo`), que la persona que da el feedback puede aceptar, editar o descartar antes de enviar.
@@ -119,11 +139,12 @@ Esto añade una capa de complejidad que conviene abordar con cuidado antes de co
 ## 12. Modelo de datos (entidades principales, alto nivel)
 
 - `companies` — tenant, plan, estado de facturación.
-- `employees` — pertenece a una company, rol, equipo/departamento.
+- `employees` — pertenece a una company, rol, equipo/departamento; estado `invitado` (solo email, todavía sin cuenta) o `activo` (completó su alta). Dado de alta por RRHH (sección 4.3), nunca se autorregistra.
 - `feedback_cycles` — ciclos estructurados 360 (fechas, configuración).
-- `feedback_requests` — invitaciones a dar feedback (ágil o de ciclo), con categoría del evaluador (jefe/equipo/empresa/otros) y token de un solo uso.
-- `feedback_responses` — contenido recibido, desacoplado de `feedback_requests` tras el envío.
-- `survey_templates` / `survey_questions` — plantillas de encuesta.
+- `feedback_requests` — una petición de feedback (ágil o de ciclo), hecha por un empleado.
+- `feedback_invitations` — a quién se invitó a responder una `feedback_request`, con categoría del evaluador (jefe/equipo/empresa/otros) y token de un solo uso; desacoplada de `feedback_responses` a propósito (sección 6). El invitado puede ser un `employee` (`invitee_employee_id`) o, solo en la categoría "otros" del ciclo 360, alguien externo sin cuenta (`invitee_email`, sección 4.1).
+- `feedback_responses` — contenido recibido, desacoplado de `feedback_requests` tras el envío; una respuesta por pregunta de la plantilla (no un único bloque de texto), ver sección 5.
+- `survey_templates` / `survey_questions` — plantillas de preguntas, cada pregunta con un tipo (`abierta`, `escala` u `opción múltiple`); la plataforma siembra una plantilla por defecto de preguntas abiertas para el flujo ágil (sección 5.1).
 - `competency_frameworks` — marco por defecto de la plataforma.
 - `company_competencies` — competencias propias definidas por cada empresa.
 - `insights` — resultados del motor de análisis, asociados al empleado receptor, nunca al emisor.
@@ -150,7 +171,7 @@ Nicho inicial: pymes. Idioma de la interfaz: español únicamente en esta fase (
 Una consecuencia directa de apuntar a pymes que conviene tener presente: los umbrales de anonimato de la sección 6 (mínimo 5 invitados, mínimo 3 respuestas para ver algo) pueden ser más difíciles de alcanzar en equipos pequeños, que es justo el tipo de equipo habitual en una pyme. No se trata de bajar el umbral — bajarlo compromete el anonimato — sino de diseñar la experiencia para que el empleado de una empresa pequeña entienda desde el principio que necesita reunir un grupo mínimo de compañeros (puede incluir a gente de fuera de su equipo directo, gracias a la categoría "compañeros de empresa") antes de poder ver resultados, en vez de encontrarse con un muro sin explicación.
 
 Incluido:
-- Alta de empresa y empleados.
+- Alta de empresa y empleados (alta de empleados uno a uno por RRHH, con invitación por email; ver sección 4.3).
 - Flujo ágil de solicitud de feedback (texto libre con asistente de redacción básico + encuesta corta).
 - Un ciclo estructurado 360 simple, con categorización de evaluadores (jefe/equipo/empresa/otros).
 - Umbrales parametrizables de invitados mínimos y respuestas mínimas (secc. 6), con valores por defecto 5 y 3.
@@ -166,6 +187,7 @@ Fuera del MVP (fases posteriores):
 - App móvil nativa.
 - Rol de manager con visibilidad intermedia.
 - Desglose de insights por categoría de evaluador (jefe/equipo/empresa/otros).
+- Carga masiva de empleados por archivo (CSV) — en el MVP el alta es uno a uno (sección 4.3).
 
 ## 15. Preguntas abiertas a validar antes de construir
 
