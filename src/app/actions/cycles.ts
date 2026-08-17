@@ -8,6 +8,7 @@ export async function createFeedbackCycle(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const opensAt = String(formData.get("opensAt") || "");
   const closesAt = String(formData.get("closesAt") || "");
+  const participantIds = formData.getAll("participantId").map(String);
 
   if (!name || !opensAt || !closesAt) {
     redirect(
@@ -21,6 +22,7 @@ export async function createFeedbackCycle(formData: FormData) {
     p_name: name,
     p_opens_at: opensAt,
     p_closes_at: closesAt,
+    p_participant_member_ids: participantIds,
   });
 
   if (error) {

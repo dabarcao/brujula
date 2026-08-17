@@ -2,6 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createFeedbackCycle } from "@/app/actions/cycles";
+import EvaluatorPicker from "@/components/EvaluatorPicker";
+
+type ColleagueRow = {
+  id: string;
+  email: string;
+  full_name: string | null;
+};
 
 export default async function NewCyclePage({
   searchParams,
@@ -21,13 +28,20 @@ export default async function NewCyclePage({
 
   const { data: currentMember } = await supabase
     .from("members")
-    .select("role")
+    .select("id, is_supervisor")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  if (!currentMember || currentMember.role !== "org_admin") {
+  if (!currentMember || !currentMember.is_supervisor) {
     redirect("/dashboard");
   }
+
+  const { data: colleagues } = await supabase
+    .from("members")
+    .select("id, email, full_name")
+    .eq("status", "active")
+    .neq("id", currentMember.id)
+    .order("email");
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
@@ -39,9 +53,10 @@ export default async function NewCyclePage({
       </div>
 
       <p className="text-sm text-gray-600 mb-6">
-        Todos los empleados activos podrán organizar a sus evaluadores mientras
-        el ciclo esté abierto. Se usa la plantilla por defecto de 24 preguntas
-        (escala 1-5 por competencia + 3 preguntas abiertas).
+        Elige quién participa en este ciclo — solo ellos podrán organizar a
+        sus evaluadores mientras esté abierto. Se usa la plantilla por
+        defecto de 24 preguntas (escala 1-5 por competencia + 3 preguntas
+        abiertas).
       </p>
 
       {error && (
@@ -69,6 +84,14 @@ export default async function NewCyclePage({
           Fecha de cierre
           <input name="closesAt" type="date" required className="border rounded px-3 py-2" />
         </label>
+
+        <div className="flex flex-col gap-1 text-sm">
+          Participantes
+          <EvaluatorPicker
+            colleagues={(colleagues as ColleagueRow[] | null) || []}
+            checkboxName="participantId"
+          />
+        </div>
 
         <button
           type="submit"

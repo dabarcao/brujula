@@ -23,36 +23,20 @@ export default async function DashboardPage() {
 
   let { data: member } = await supabase
     .from("members")
-    .select("id, role, organization_id, organizations(name)")
+    .select("id, is_supervisor, organization_id, organizations(name)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  // Primera vez que este usuario entra tras confirmar su correo: resolvemos
-  // lo que quedó pendiente al registrarse — o bien crear la organización
-  // (alta de empresa), o bien vincularse a un "members" que RRHH ya creó
-  // al invitarle (alta de empleado, ver 0003_member_invites.sql).
+  // Primera vez que este usuario entra tras confirmar su correo: resuelve lo
+  // que quedó pendiente al invitarle (alta de empleado, ver
+  // 0003_member_invites.sql). El alta de empresa ya no pasa por aquí — la
+  // hace el Admin general desde /admin (ver 0016_platform_admin_org_creation.sql).
   if (!member) {
-    const pendingOrgName = user.user_metadata?.pending_org_name as
-      | string
-      | undefined;
     const pendingInviteToken = user.user_metadata?.pending_invite_token as
       | string
       | undefined;
 
-    if (pendingOrgName) {
-      const { error } = await supabase.rpc("create_organization_and_admin", {
-        org_name: pendingOrgName,
-      });
-
-      if (!error) {
-        const { data: refreshedMember } = await supabase
-          .from("members")
-          .select("id, role, organization_id, organizations(name)")
-          .eq("auth_user_id", user.id)
-          .maybeSingle();
-        member = refreshedMember;
-      }
-    } else if (pendingInviteToken) {
+    if (pendingInviteToken) {
       const { error } = await supabase.rpc("accept_member_invite", {
         p_token: pendingInviteToken,
       });
@@ -60,7 +44,7 @@ export default async function DashboardPage() {
       if (!error) {
         const { data: refreshedMember } = await supabase
           .from("members")
-          .select("id, role, organization_id, organizations(name)")
+          .select("id, is_supervisor, organization_id, organizations(name)")
           .eq("auth_user_id", user.id)
           .maybeSingle();
         member = refreshedMember;
@@ -69,13 +53,24 @@ export default async function DashboardPage() {
   }
 
   if (!member) {
+    const { data: isAdmin } = await supabase.rpc("is_platform_admin");
+
     return (
       <main className="flex-1 flex items-center justify-center p-8">
         <div className="max-w-md text-center">
-          <p className="mb-4">
-            Tu cuenta todavía no está asociada a ninguna organización.
-          </p>
-          <form action={signOut}>
+          {isAdmin ? (
+            <>
+              <p className="mb-4">Has entrado como administrador de plataforma.</p>
+              <Link href="/admin" className="underline text-sm">
+                Ir al panel de administración
+              </Link>
+            </>
+          ) : (
+            <p className="mb-4">
+              Tu cuenta todavía no está asociada a ninguna organización.
+            </p>
+          )}
+          <form action={signOut} className="mt-4">
             <button className="underline text-sm">Cerrar sesión</button>
           </form>
         </div>
@@ -118,12 +113,29 @@ export default async function DashboardPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: openCycles } = await supabase
-    .from("feedback_cycles")
-    .select("id, name, opens_at, closes_at")
-    .lte("opens_at", today)
-    .gte("closes_at", today)
-    .order("opens_at");
+  // Solo los ciclos donde este empleado fue seleccionado como participante
+  // por el Supervisor (feedback_cycle_participants), no todos los de la
+  // empresa — ver 0017_supervisor_and_admin_management.sql.
+  const { data: participantRows } = await supabase
+    .from("feedback_cycle_participants")
+    .select("feedback_cycles(id, name, opens_at, closes_at)")
+    .eq("member_id", member.id);
+
+  const openCycles = (
+    (participantRows || [])
+      .map(
+        (row) =>
+          row.feedback_cycles as unknown as {
+            id: string;
+            name: string;
+            opens_at: string;
+            closes_at: string;
+          } | null
+      )
+      .filter((cycle): cycle is NonNullable<typeof cycle> => Boolean(cycle))
+      .filter((cycle) => cycle.opens_at <= today && today <= cycle.closes_at)
+      .sort((a, b) => a.opens_at.localeCompare(b.opens_at))
+  );
 
   const { data: myCycleRequests } = await supabase
     .from("feedback_requests")
@@ -146,11 +158,11 @@ export default async function DashboardPage() {
 
       <p className="text-gray-600">
         Sesión iniciada como <strong>{user.email}</strong>
-        {member.role === "org_admin" ? " (administrador)" : ""}.
+        {member.is_supervisor ? " (administrador)" : ""}.
       </p>
 
       <div className="flex gap-4 mt-4">
-        {member.role === "org_admin" && (
+        {member.is_supervisor && (
           <>
             <Link href="/dashboard/members" className="text-sm underline text-gray-700">
               Gestionar empleados

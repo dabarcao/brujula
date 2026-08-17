@@ -1,6 +1,6 @@
 # Brújula — Especificación de producto
 
-*Herramienta de feedback anónimo para empleados. v0.3 — nombre del proyecto añadido, decisión final de hosting (Vercel).*
+*Herramienta de feedback anónimo para empleados. v0.4 — modelo de roles ampliado (Admin general de plataforma, Supervisor, Jefe, Empleado), cuestionarios y marco de competencias centralizados en el Admin general, auto-registro por dominio de empresa, y primer borrador de agrupación de competencias inspirado en los tres principios de las organizaciones teal (Laloux). Ver notas "Pendiente de implementar" en las secciones afectadas: son decisiones de diseño acordadas, el código todavía implementa el modelo anterior (2 roles).*
 
 ## 1. Resumen ejecutivo
 
@@ -10,12 +10,22 @@ El reto central del producto no es tanto la interfaz como la arquitectura de con
 
 ## 2. Usuarios y roles
 
+- **Admin general** (rol de plataforma, el proveedor — vosotros): no pertenece a ninguna empresa, identificado por email en una lista de administradores de plataforma. Tiene alta/baja/modificación (ABM) transversal sobre:
+  - Empresas — **implementado**: crear, listar y renombrar desde `/admin`. Falta desactivar/eliminar.
+  - Usuarios de cualquier empresa (alta individual y masiva) — *pendiente de implementar*, hoy el Admin general solo da de alta al primer Supervisor de una empresa nueva, no gestiona el resto de usuarios.
+  - Grupos — *pendiente de implementar*.
+  - Plantillas de cuestionarios — preguntas abiertas y de escala (secciones 5.1/5.2) — *pendiente de implementar*; hoy nadie puede crear cuestionarios propios (ver nota de la sección 5.1).
+  - Competencias del marco interno de la plataforma (sección 7) — una competencia no se puede eliminar si tiene preguntas de cuestionario asociadas — *pendiente de implementar*.
+  - **No** crea ni gestiona ciclos 360 — eso es siempre responsabilidad de la empresa (rol Supervisor).
+- **Supervisor** (RRHH de la empresa — es el rol antes descrito aquí como "Admin de empresa"): ABM de usuarios dentro de su propia empresa, configura y lanza ciclos 360 (seleccionando explícitamente quién participa en cada uno), ve métricas agregadas de su empresa. No ve feedback individual. No define competencias propias ni cuestionarios propios (eso pasa a ser exclusivo del Admin general). **Implementado como una capacidad (`is_supervisor`) sobre un miembro normal, no como un rol excluyente** — así la misma persona puede ser Supervisor y Usuario participante a la vez (pide su propio feedback, hace su propia 360), con una sola cuenta; el mismo patrón que ya usaba `is_manager` ("Jefe"). Un Supervisor por empresa por ahora (impuesto a nivel de base de datos); si se necesita un equipo de varios Supervisores por empresa, queda para más adelante. Grupos dentro de la empresa: *pendiente de implementar*.
+- **Jefe**: rol intermedio dentro de la empresa — recibe/responde las preguntas del ciclo 360 marcadas como "solo responsable" (sección 5.2), sin privilegios de administración. Es el flag `is_manager` ya existente, con el mismo patrón de "capacidad sobre un miembro" que Supervisor.
 - **Empleado**: solicita feedback, responde encuestas/feedback de otros, ve sus propios insights, su gráfico de competencias y sus comparativas.
-- **Admin de empresa (RRHH)**: gestiona altas/bajas de empleados, configura ciclos estructurados, define las competencias clave de la organización, ve métricas agregadas. No ve feedback individual.
-- **Manager de equipo** (fase futura, no MVP): posible rol intermedio con visibilidad agregada solo de su equipo.
-- **Super-admin de plataforma** (vosotros, el proveedor): gestiona altas de empresas clientes, facturación, soporte, y el marco de competencias por defecto de la plataforma.
 
-> **Nota de implementación (piloto/desarrollo):** el modelo objetivo es que el alta de empresa la gestione el super-admin de plataforma, no la propia empresa. Mientras no haya clientes reales, el alta de empresa se deja como flujo self-service público (`/signup`, cualquiera puede crear una organización y queda como su admin), para agilizar el desarrollo. Antes de dar de alta al primer cliente externo, este flujo debe moverse dentro de un panel de super-admin y dejar de ser público.
+**Alta de usuarios:** por invitación uno a uno (sección 4.3, ya implementado) o por auto-registro cuando el email coincide con el dominio de la empresa (por ejemplo, `pepe@empresa.com` para la empresa `empresa.com`) — **solo** si ese usuario ya existía previamente como registro `inactivo` en la base de datos, precargado por un Supervisor o el Admin general. El dominio por sí solo nunca da acceso a alguien no precargado. *(Pendiente de implementar.)*
+
+> **Implementado:** el alta de empresa ya no es autoservicio público — `/signup` se retiró. El Admin general (identificado por su email en la tabla `platform_admins`) da de alta empresas nuevas desde `/admin`, que queda como Supervisor invitado de esa empresa hasta que completa su alta. Desde fuera de la app solo quedan dos puertas: iniciar sesión o entrar por invitación.
+
+> **Pendiente de implementar:** ABM de usuarios/grupos por parte del Admin general (hoy solo crea la empresa y su primer Supervisor), ABM de cuestionarios y de competencias, grupos dentro de una empresa, y el auto-registro por dominio.
 
 ## 3. Multi-tenancy
 
@@ -25,7 +35,7 @@ Desde el primer día, la aplicación es multi-empresa: cada empresa cliente es u
 
 ### 4.1 Ciclo estructurado (tipo 360)
 
-Pensado para evaluaciones periódicas (semestrales, por ejemplo). RRHH configura el ciclo: fechas de apertura/cierre, y el cuestionario asociado. Los evaluadores potenciales están categorizados por su relación con el empleado:
+Pensado para evaluaciones periódicas (semestrales, por ejemplo). El Supervisor configura el ciclo: fechas de apertura/cierre, el cuestionario asociado, y **selecciona explícitamente quién participa** — el ciclo ya no se abre automáticamente para toda la empresa, solo las personas elegidas pueden organizar a sus evaluadores. Los evaluadores potenciales están categorizados por su relación con el empleado:
 
 - Jefe / responsable directo
 - Compañeros de equipo
@@ -40,9 +50,15 @@ El empleado, dentro del ciclo, puede agrupar y organizar a sus evaluadores segú
 
 El empleado elige personas concretas (mínimo parametrizable, ver sección 6) y solicita feedback puntual y contextual — por ejemplo, sobre una presentación reciente. Este flujo es, ante todo, una herramienta de progresión individual: alimenta el perfil de competencias del empleado, pero por su naturaleza puntual y de bajo volumen pesa menos (o nada, según se decida) en las métricas agregadas de empresa, que se nutren principalmente del ciclo estructurado. En el flujo ágil, el empleado elige entre compañeros ya dados de alta en la organización (no hay categoría "Otros" aquí, esa es propia del ciclo 360).
 
+**Tipo de solicitud:** cada solicitud ágil tiene un tipo — reunión/presentación, colaboración, liderazgo de una iniciativa, o general/desarrollo profesional — y cada tipo tiene su propia plantilla guiada de preguntas (ver sección 5.1). Las plantillas de cada tipo las crea y mantiene el Admin general de plataforma (sección 2), no la propia empresa: puede definir plantillas **genéricas** (visibles por defecto para todas las empresas) o plantillas **asignadas a una o varias empresas concretas**, a medida de su cultura y vocabulario. *(Pendiente de implementar — sustituye al modelo anterior, donde cada empresa sustituía directamente la plantilla de su propio tipo.)*
+
+**Una solicitud abierta a la vez:** un empleado no puede tener más de una solicitud ágil abierta simultáneamente. Mientras esté abierta y nadie haya respondido todavía, puede modificar a quién invitó o cancelarla; en cuanto hay alguna respuesta, ninguna de las dos acciones está disponible.
+
 ### 4.3 Alta de empleados
 
-Los empleados no se dan de alta a sí mismos: los da de alta RRHH (admin de empresa), uno a uno, con nombre y email — la persona invitada recibe un correo para completar su registro (contraseña) y queda vinculada a esa organización. La carga masiva por archivo (CSV) queda fuera del MVP, como mejora de roadmap futuro (ver sección 14).
+Los empleados no se dan de alta a sí mismos: los da de alta el Supervisor (RRHH de la empresa) o el Admin general, uno a uno, con nombre y email — la persona invitada recibe un correo para completar su registro (contraseña) y queda vinculada a esa organización. La carga masiva por archivo (CSV) queda fuera del MVP, como mejora de roadmap futuro (ver sección 14) — aunque el modelo de roles de la sección 2 ya contempla alta masiva entre las capacidades del Admin general, pendiente de decidir si entra en el alcance del piloto.
+
+**Alta por dominio de empresa (pendiente de implementar, ver sección 2):** además de la invitación uno a uno, se añade una segunda vía de alta — auto-registro cuando el email del usuario coincide con el dominio de la empresa, y solo si ese usuario ya existía como registro `inactivo` precargado por un Supervisor o el Admin general.
 
 Ambos flujos alimentan el mismo motor de análisis y el mismo mapa de competencias del empleado.
 
@@ -50,17 +66,23 @@ Ambos flujos alimentan el mismo motor de análisis y el mismo mapa de competenci
 
 Los tipos 5.1 y 5.2 comparten el mismo modelo subyacente: una **plantilla de preguntas**, donde cada pregunta tiene un tipo (`abierta`, `escala` u `opción múltiple`). Lo que distingue un "texto libre" de una "encuesta corta" no es la infraestructura, sino qué tipos de pregunta contiene la plantilla.
 
-### 5.1 Texto libre (plantilla guiada por defecto)
+### 5.1 Texto libre (plantilla guiada por tipo de solicitud)
 
-En vez de una única caja de texto en blanco, el feedback libre usa una plantilla fija de preguntas abiertas, la misma para todas las empresas en el MVP (no editable por RRHH todavía):
+En vez de una única caja de texto en blanco, el feedback libre usa una plantilla fija de preguntas abiertas. Cada solicitud ágil tiene un **tipo**, y cada tipo su propia plantilla por defecto de la plataforma:
 
-1. ¿Qué habilidad destacarías de esta persona en su desarrollo profesional?
-2. ¿Cuál crees que es un área de mejora para profundizar en su desarrollo profesional?
-3. ¿Qué es aquello que le invitarías a seguir haciendo?
-4. ¿Qué crees que podría ayudarle en su desarrollo profesional dejar de hacer?
-5. ¿Algo más que quieras añadir? (opcional, campo libre para lo que no encaje en las preguntas anteriores)
+- **General / desarrollo profesional** (tipo por defecto):
+  1. ¿Qué habilidad destacarías de esta persona en su desarrollo profesional?
+  2. ¿Cuál crees que es un área de mejora para profundizar en su desarrollo profesional?
+  3. ¿Qué es aquello que le invitarías a seguir haciendo?
+  4. ¿Qué crees que podría ayudarle en su desarrollo profesional dejar de hacer?
+  5. ¿Algo más que quieras añadir? (opcional)
+- **Reunión / presentación**, **Colaboración**, **Liderazgo de una iniciativa**: mismo patrón (4 preguntas guiadas + 1 opcional), adaptadas a cada contexto.
+
+**Cuestionarios por empresa (modelo centralizado):** las plantillas — abiertas o de escala — las crea y mantiene el Admin general de plataforma, no cada empresa por separado (sección 2). Cada plantilla es **genérica** (visible por defecto para todas las empresas) o queda **asignada a una o varias empresas concretas** (a medida de su cultura, sustituyendo a la genérica de ese tipo solo para esas empresas). *(Pendiente de implementar. Estado actual: se retiró la posibilidad de que la empresa cree su propio cuestionario — todas las solicitudes ágiles usan siempre la plantilla por defecto de la plataforma hasta que exista el panel de cuestionarios del Admin general.)*
 
 Las preguntas son genéricas, no ligadas a una competencia concreta (por ejemplo, no se formulan específicamente sobre "liderazgo"): el motor de análisis clasifica cada respuesta contra el marco de competencias vigente (sección 7), igual que haría con un texto libre sin estructurar.
+
+**Autoevaluación (ciclo 360):** cuando quien responde es la propia persona evaluada, no se le piden las preguntas abiertas — solo tiene sentido pedirlas sobre otra persona. Su autoevaluación se limita a las preguntas de escala (sección 5.2).
 
 Al responder cada pregunta, un asistente de IA ligero ayuda a quien escribe a construir una respuesta más precisa y útil para quien la solicita, en el momento (no confundir con el motor de análisis asíncrono de la sección 8, que procesa el feedback ya enviado):
 
@@ -71,7 +93,9 @@ Esta asistencia ayuda además al motor de análisis, porque las etiquetas acepta
 
 ### 5.2 Encuesta corta
 
-Preguntas cerradas (escala, opción múltiple), definidas por la plataforma o configurables por RRHH en el ciclo estructurado.
+Preguntas cerradas (escala, opción múltiple), definidas por la plataforma o configurables por RRHH en el ciclo estructurado. A diferencia de las preguntas abiertas, cada pregunta cerrada va etiquetada con una competencia del marco interno de la plataforma (sección 7) — es lo que permite construir el mapa de competencias y, más adelante, percentiles por departamento o por empresa.
+
+**Cuestionario propio del ciclo 360:** aquí el patrón es distinto al del flujo ágil (sección 5.1): las preguntas de escala específicas de una empresa **se añaden** después del bloque base de preguntas por defecto de la plataforma, no lo sustituyen. Esa sección propia la crea el Admin general de plataforma y la asigna a la empresa concreta (sección 2) — no es la empresa quien la redacta directamente. Cada ciclo nuevo que se crea copia ese bloque base más la sección asignada a la empresa (si existe) a su propia plantilla, así los cambios posteriores al cuestionario no afectan a ciclos ya en marcha. *(Pendiente de implementar — cambia "quién" crea la sección propia; el patrón aditivo en sí se mantiene.)*
 
 ### 5.3 Pregunta con imagen (fuera del MVP, roadmap futuro)
 
@@ -96,9 +120,20 @@ Además, a nivel técnico:
 
 ## 7. Marco de competencias
 
-- La plataforma define un **marco de competencias por defecto** (comunicación, liderazgo, colaboración, gestión del tiempo, etc.), curado inicialmente y ampliable con el tiempo.
-- Cada empresa puede definir sus propias **competencias clave**, alineadas con su cultura y propósito colectivo (por ejemplo, una empresa muy orientada a innovación podría añadir "pensamiento creativo" como competencia prioritaria). Estas conviven con el marco por defecto: la empresa puede priorizar o destacar ciertas competencias sin eliminar la base común, lo que permite comparabilidad (ver sección 10) mientras cada organización vela por lo que le importa a nivel colectivo.
-- El motor de análisis clasifica el feedback recibido (texto y encuesta) contra este marco combinado (base de la plataforma + competencias propias de la empresa).
+- La plataforma define un **marco de competencias único**, curado y mantenido en exclusiva por el Admin general de plataforma (ABM completo, sección 2). *(Pendiente de implementar — sustituye a la idea anterior de que cada empresa definía sus propias "competencias clave"; las empresas ya no lo hacen, usan siempre el marco único de la plataforma. Revisar también secciones 11 y 14, que todavía reflejan el modelo antiguo.)*
+- Una competencia **no se puede eliminar** si tiene preguntas de cuestionario asociadas, para no romper el histórico de feedback ya clasificado contra ella.
+- El motor de análisis clasifica el feedback recibido (texto y encuesta) contra este marco único.
+- Este marco de competencias es **interno de la plataforma**: aunque una plantilla esté asignada a una empresa concreta (sección 5), cada pregunta de escala sigue etiquetada contra este mismo marco compartido. Es lo que hace posibles el mapa de competencias global y los futuros percentiles comparables entre departamentos y entre empresas (sección 10). Las preguntas abiertas quedan fuera de este etiquetado directo — su clasificación por competencia la hace el motor de análisis (sección 8), no una etiqueta fija por pregunta; las preguntas de escala, en cambio, requieren competencia obligatoriamente.
+
+**Agrupación interna de competencias — borrador de trabajo, no cerrado:** internamente, las competencias del marco se organizan en tres dominios inspirados en los tres principios de las organizaciones "teal" de Frederic Laloux (*Reinventar las organizaciones*). Es una estructura de análisis, **no se expone con este lenguaje al usuario final** — la empresa/empleado ve las preguntas y resultados sin referencias a "teal" ni a Laloux.
+
+- **Propósito evolutivo**: visión y propósito, toma de decisiones, estrategia, orientación a resultados, visión sistémica, ecología. *Ecología* se entiende como dos ideas relacionadas: uso responsable de recursos (minimizar desperdicio de tiempo/materiales/esfuerzo) y coherencia entre el trabajo diario de la persona y el impacto que la organización dice querer generar.
+- **Equipos autoorganizados**: coaching, mentoring, colaboración, trabajo en equipo, inteligencia interpersonal.
+- **Autenticidad / plenitud**: valores, autenticidad, coraje (valentía), gestión emocional.
+
+Nombres y alcance exacto de cada competencia quedan pendientes de afinar — esto es un borrador para poder construir algo tangible, no una lista cerrada.
+
+**Visión de producto (por qué esta estructura):** Brújula es deliberadamente **humanista, no técnica** — no mide desempeño ni skills técnicos. En términos de los cuadrantes de Ken Wilber: el feedback individual entre compañeros vive en el terreno subjetivo/individual (cuadrante 1) — la experiencia de cada persona. Los informes agregados por departamento/empresa permiten leer patrones de cultura compartida (cuadrante 3) — el clima de la organización. El feedback alimenta el cuadrante 1; los informes, el cuadrante 3.
 
 ## 8. Motor de análisis e insights
 
@@ -126,15 +161,18 @@ Esto añade una capa de complejidad que conviene abordar con cuidado antes de co
 
 ## 11. Qué ve cada rol
 
-| Vista | Empleado | Admin de empresa |
+> **Nota:** tabla pendiente de ampliar con columnas para Admin general y Jefe cuando se implemente el modelo de 4 roles de la sección 2. "Admin de empresa" de esta tabla equivale al rol Supervisor.
+
+| Vista | Empleado | Supervisor (RRHH empresa) |
 |---|---|---|
 | Feedback recibido (texto/encuesta) | Sí, sin saber quién lo envió, solo si se supera el umbral mínimo | No |
 | Gráfico de araña de competencias propio | Sí | No |
 | Comparativa vs. media de empresa / media global | Sí (fase posterior) | No |
 | Métricas agregadas por equipo/departamento | No | Sí, con umbral mínimo aplicado |
-| Definición de competencias clave de la empresa | No | Sí |
+| Definición de competencias del marco | No | No — exclusivo del Admin general (sección 7) |
 | Estado de ciclos 360 (progreso de participación, sin contenido) | — | Sí |
-| Gestión de usuarios y facturación | No | Sí |
+| Gestión de usuarios (de su empresa) | No | Sí |
+| Gestión de empresas y facturación | No | No — exclusivo del Admin general |
 
 ## 12. Modelo de datos (entidades principales, alto nivel)
 
@@ -151,6 +189,8 @@ Esto añade una capa de complejidad que conviene abordar con cuidado antes de co
 - `competency_scores` — puntuación acumulada por empleado y competencia, base del gráfico de araña y de futuros percentiles.
 - `aggregate_metrics` — agregados por equipo/departamento, con umbral de k-anonimity aplicado antes de persistir.
 - `platform_settings` — umbrales configurables (mínimo de invitados, mínimo de respuestas) y sus suelos de seguridad.
+- `groups` (pendiente, sección 2) — agrupaciones de usuarios dentro de una empresa, gestionadas por el Supervisor o el Admin general; alcance exacto por definir.
+- Alta de `employees` también podrá darse por coincidencia de dominio de email con la empresa, si el registro ya existe como `inactivo` precargado (secciones 2 y 4.3) — pendiente de implementar.
 
 ## 13. Arquitectura técnica propuesta (piloto en infraestructura gratuita/muy bajo coste)
 
@@ -175,7 +215,7 @@ Incluido:
 - Flujo ágil de solicitud de feedback (texto libre con asistente de redacción básico + encuesta corta).
 - Un ciclo estructurado 360 simple, con categorización de evaluadores (jefe/equipo/empresa/otros).
 - Umbrales parametrizables de invitados mínimos y respuestas mínimas (secc. 6), con valores por defecto 5 y 3.
-- Marco de competencias por defecto de la plataforma + posibilidad de que la empresa marque sus competencias clave.
+- Marco de competencias único de la plataforma, con ABM completo exclusivo del Admin general (sección 7); las empresas ya no definen competencias propias.
 - Motor de análisis básico: clasificación por competencia + insights progresivos simples.
 - Gráfico de araña de competencias para el empleado.
 - Dashboard de empresa con métricas agregadas mínimas por competencia/equipo.
@@ -185,9 +225,11 @@ Fuera del MVP (fases posteriores):
 - SSO corporativo.
 - Integraciones con calendario/Slack/Teams.
 - App móvil nativa.
-- Rol de manager con visibilidad intermedia.
+- Rol de manager con visibilidad intermedia — pasa a llamarse "Jefe" en el modelo de roles de la sección 2; alcance y visibilidad exactos todavía por definir en detalle.
 - Desglose de insights por categoría de evaluador (jefe/equipo/empresa/otros).
-- Carga masiva de empleados por archivo (CSV) — en el MVP el alta es uno a uno (sección 4.3).
+- Carga masiva de empleados por archivo (CSV) — en el MVP el alta es uno a uno (sección 4.3). *(Nota: el modelo de roles de la sección 2 ya contempla alta masiva entre las capacidades del Admin general — pendiente decidir si entra en el alcance del piloto o se relega a fase posterior.)*
+- Grupos de usuarios y Admin general de plataforma como panel construido (sección 2) — de momento son decisiones de diseño, no código.
+- **Enviar reconocimiento**: función para que un usuario reconozca/valide una skill de otro usuario del sistema (menú de rol Usuario, sección 2). Idea nueva, todavía sin diseñar — queda registrada como futura función, no entra en el piloto actual.
 
 ## 15. Preguntas abiertas a validar antes de construir
 
@@ -195,6 +237,10 @@ Fuera del MVP (fases posteriores):
 - ¿El benchmarking global (sección 10) es algo que ofreceremos como opt-in por empresa, o vendrá incluido por defecto?
 - ¿Habrá un plan gratuito/trial para las primeras empresas pequeñas, o se cobra desde el primer cliente?
 - ¿El feedback ágil/individual debe contribuir algo (aunque sea con menor peso) a las métricas agregadas de empresa, o queda completamente fuera de esas métricas como herramienta puramente personal?
+- ¿El rol "Jefe" pasa a ser un rol propio en el modelo de datos, o se mantiene como el atributo `is_manager` ya existente?
+- ¿Qué son exactamente los "grupos" del Admin general/Supervisor — equivalen a los `departments` ya existentes, o es un concepto nuevo y distinto que convive con ellos?
+- ¿La agrupación de competencias en los tres dominios inspirados en Laloux (sección 7) es solo una estructura interna de análisis, o en algún momento se expone al usuario (por ejemplo, en los informes agregados de empresa)?
+- ¿La alta masiva de usuarios (sección 2/4.3) entra en el alcance del piloto actual o se relega a fase posterior?
 
 ## 16. Extensibilidad a otros verticales (visión a futuro)
 

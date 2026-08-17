@@ -8,9 +8,9 @@ type MemberRow = {
   id: string;
   email: string;
   full_name: string | null;
-  role: string;
   status: string;
   is_manager: boolean;
+  is_supervisor: boolean;
   department_id: string;
   invite_token: string;
   created_at: string;
@@ -39,7 +39,7 @@ export default async function MembersPage({
 
   const { data: currentMember } = await supabase
     .from("members")
-    .select("id, role, organization_id")
+    .select("id, is_supervisor, organization_id")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -47,7 +47,7 @@ export default async function MembersPage({
     redirect("/dashboard");
   }
 
-  if (currentMember.role !== "org_admin") {
+  if (!currentMember.is_supervisor) {
     return (
       <main className="flex-1 flex items-center justify-center p-8">
         <div className="max-w-md text-center">
@@ -62,7 +62,7 @@ export default async function MembersPage({
 
   const { data: members } = await supabase
     .from("members")
-    .select("id, email, full_name, role, status, is_manager, department_id, invite_token, created_at")
+    .select("id, email, full_name, status, is_manager, is_supervisor, department_id, invite_token, created_at")
     .order("created_at");
 
   const { data: departments } = await supabase
@@ -177,7 +177,7 @@ export default async function MembersPage({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {member.role === "org_admin" && (
+              {member.is_supervisor && (
                 <span className="text-xs rounded-full bg-gray-100 px-2 py-1">admin</span>
               )}
               {member.is_manager && (

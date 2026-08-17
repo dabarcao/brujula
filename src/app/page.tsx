@@ -9,14 +9,8 @@ export default function Home() {
       </p>
       <div className="flex gap-3 mt-2">
         <Link
-          href="/signup"
-          className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800"
-        >
-          Crear tu empresa
-        </Link>
-        <Link
           href="/login"
-          className="border rounded px-4 py-2 text-sm hover:bg-gray-50"
+          className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800"
         >
           Iniciar sesión
         </Link>

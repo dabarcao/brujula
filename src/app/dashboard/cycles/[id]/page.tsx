@@ -59,6 +59,15 @@ export default async function CyclePage({
   const today = new Date().toISOString().slice(0, 10);
   const isOpen = cycle.opens_at <= today && today <= cycle.closes_at;
 
+  const { data: participation } = await supabase
+    .from("feedback_cycle_participants")
+    .select("cycle_id")
+    .eq("cycle_id", id)
+    .eq("member_id", currentMember.id)
+    .maybeSingle();
+
+  const isParticipant = Boolean(participation);
+
   const { data: existingRequest } = await supabase
     .from("feedback_requests")
     .select("id")
@@ -82,7 +91,11 @@ export default async function CyclePage({
         </Link>
       </div>
 
-      {!isOpen ? (
+      {!isParticipant ? (
+        <p className="text-sm text-gray-600">
+          No has sido seleccionado como participante de este ciclo.
+        </p>
+      ) : !isOpen ? (
         <p className="text-sm text-gray-600">
           Este ciclo no está abierto actualmente (del {cycle.opens_at} al{" "}
           {cycle.closes_at}).

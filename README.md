@@ -81,6 +81,25 @@ contenido de cada uno y pégalo en el SQL Editor del dashboard de Supabase
   empresa — sustituyen al de la plataforma en el flujo ágil, se añaden
   después del bloque por defecto en el ciclo 360
   (`/dashboard/questionnaires`).
+- `0014_close_completed_ad_hoc_request.sql`: permite marcar como
+  completada una solicitud ágil que ya tiene respuestas (distinto de
+  cancelar, que solo vale sin respuestas).
+- `0015_org_questionnaires_disabled.sql`: revierte 0013 — crear/editar
+  cuestionarios propios de empresa deja de ser una capacidad del
+  Supervisor, queda reservado para el futuro Admin general. Se borra
+  `/dashboard/questionnaires`.
+- `0016_platform_admin_org_creation.sql`: el alta de empresa deja de ser
+  autoservicio público (`/signup`, ahora retirado). Añade la tabla
+  `platform_admins` y el panel `/admin`, donde el Admin general da de
+  alta empresas nuevas.
+- `0017_supervisor_and_admin_management.sql`: el Supervisor pasa de ser
+  un `role` excluyente (`org_admin`) a una capacidad (`is_supervisor`)
+  sobre un miembro normal, igual que `is_manager` — así puede ser
+  Supervisor y Usuario participante a la vez, con una sola cuenta. El
+  ciclo 360 deja de abrirse automáticamente para toda la empresa: el
+  Supervisor selecciona explícitamente los participantes al crearlo
+  (`feedback_cycle_participants`). `/admin` gana listado y edición
+  (renombrar) de empresas ya creadas.
 
 ### Confirmación de email
 
