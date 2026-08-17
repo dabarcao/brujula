@@ -12,6 +12,7 @@ type MemberRow = {
   status: string;
   is_manager: boolean;
   department_id: string;
+  invite_token: string;
   created_at: string;
 };
 
@@ -61,7 +62,7 @@ export default async function MembersPage({
 
   const { data: members } = await supabase
     .from("members")
-    .select("id, email, full_name, role, status, is_manager, department_id, created_at")
+    .select("id, email, full_name, role, status, is_manager, department_id, invite_token, created_at")
     .order("created_at");
 
   const { data: departments } = await supabase
@@ -192,6 +193,17 @@ export default async function MembersPage({
               >
                 {member.status === "active" ? "activo" : "invitado"}
               </span>
+              {member.status === "invited" && (
+                <Link
+                  href={
+                    `/dashboard/members?invited=${encodeURIComponent(member.invite_token)}` +
+                    `&invitedEmail=${encodeURIComponent(member.email)}`
+                  }
+                  className="text-xs underline text-gray-600"
+                >
+                  Ver link
+                </Link>
+              )}
             </div>
           </li>
         ))}

@@ -2,11 +2,19 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createFeedbackRequest } from "@/app/actions/feedback";
+import EvaluatorPicker from "@/components/EvaluatorPicker";
 
 type ColleagueRow = {
   id: string;
   email: string;
   full_name: string | null;
+};
+
+const SUBTYPE_LABELS: Record<string, string> = {
+  general: "General / desarrollo profesional",
+  meeting: "Reunión / presentación",
+  collaboration: "Colaboración",
+  leadership_initiative: "Liderazgo de una iniciativa",
 };
 
 export default async function NewFeedbackRequestPage({
@@ -33,6 +41,38 @@ export default async function NewFeedbackRequestPage({
 
   if (!currentMember || currentMember.status !== "active") {
     redirect("/dashboard");
+  }
+
+  const { data: openRequest } = await supabase
+    .from("feedback_requests")
+    .select("id")
+    .eq("requester_member_id", currentMember.id)
+    .eq("request_type", "ad_hoc")
+    .eq("status", "open")
+    .maybeSingle();
+
+  if (openRequest) {
+    return (
+      <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-semibold">Pedir feedback</h1>
+          <Link href="/dashboard" className="text-sm underline text-gray-600">
+            Volver al panel
+          </Link>
+        </div>
+        <p className="text-sm text-gray-600">
+          Ya tienes una solicitud abierta. Solo puedes tener una a la vez —
+          puedes modificarla o cancelarla (mientras nadie haya respondido
+          todavía) desde su página.
+        </p>
+        <Link
+          href={`/dashboard/feedback/${openRequest.id}`}
+          className="inline-block mt-4 underline text-sm"
+        >
+          Ver mi solicitud abierta
+        </Link>
+      </main>
+    );
   }
 
   const { data: colleagues } = await supabase
@@ -79,26 +119,24 @@ export default async function NewFeedbackRequestPage({
         </p>
       ) : (
         <form action={createFeedbackRequest} className="flex flex-col gap-4">
-          <ul className="border rounded divide-y">
-            {(colleagues as ColleagueRow[]).map((colleague) => (
-              <li key={colleague.id} className="flex items-center gap-3 px-4 py-3 text-sm">
-                <input
-                  type="checkbox"
-                  name="inviteeIds"
-                  value={colleague.id}
-                  id={`invitee-${colleague.id}`}
-                />
-                <label htmlFor={`invitee-${colleague.id}`} className="flex-1">
-                  <span className="font-medium">
-                    {colleague.full_name || colleague.email}
-                  </span>
-                  {colleague.full_name && (
-                    <span className="text-gray-500"> · {colleague.email}</span>
-                  )}
+          <fieldset className="border rounded p-4">
+            <legend className="text-sm font-medium px-1">¿Sobre qué es el feedback?</legend>
+            <div className="flex flex-col gap-2 mt-2">
+              {Object.entries(SUBTYPE_LABELS).map(([value, label]) => (
+                <label key={value} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="subtype"
+                    value={value}
+                    defaultChecked={value === "general"}
+                  />
+                  {label}
                 </label>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
+          </fieldset>
+
+          <EvaluatorPicker colleagues={colleagues as ColleagueRow[]} checkboxName="inviteeIds" />
 
           <button
             type="submit"

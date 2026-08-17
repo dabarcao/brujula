@@ -3,6 +3,13 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
 
+const SUBTYPE_LABELS: Record<string, string> = {
+  general: "general / desarrollo profesional",
+  meeting: "reunión / presentación",
+  collaboration: "colaboración",
+  leadership_initiative: "liderazgo de iniciativa",
+};
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -105,7 +112,7 @@ export default async function DashboardPage() {
 
   const { data: myRequests } = await supabase
     .from("feedback_requests")
-    .select("id, created_at, request_type")
+    .select("id, created_at, request_type, subtype, status")
     .eq("requester_member_id", member.id)
     .order("created_at", { ascending: false });
 
@@ -150,6 +157,9 @@ export default async function DashboardPage() {
             </Link>
             <Link href="/dashboard/cycles/nueva" className="text-sm underline text-gray-700">
               Crear ciclo 360
+            </Link>
+            <Link href="/dashboard/questionnaires" className="text-sm underline text-gray-700">
+              Cuestionarios
             </Link>
           </>
         )}
@@ -239,7 +249,12 @@ export default async function DashboardPage() {
               <li key={request.id} className="px-4 py-3 text-sm">
                 <Link href={`/dashboard/feedback/${request.id}`} className="underline">
                   Solicitud del {new Date(request.created_at).toLocaleDateString("es-ES")}
-                  {request.request_type === "cycle" ? " (ciclo 360)" : ""}
+                  {request.request_type === "cycle"
+                    ? " (ciclo 360)"
+                    : ` (${SUBTYPE_LABELS[request.subtype ?? "general"]})`}
+                  {request.status === "closed" && request.request_type === "ad_hoc"
+                    ? " — cerrada"
+                    : ""}
                 </Link>
               </li>
             ))}

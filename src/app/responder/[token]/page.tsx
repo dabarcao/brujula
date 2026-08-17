@@ -94,9 +94,13 @@ export default async function RespondPage({
 
   // Las preguntas "manager_only" (spec: distinción empleado/responsable, ver
   // 0006_departments_and_360_template.sql) solo aplican cuando la persona
-  // EVALUADA es responsable de equipo, sin importar quién responde.
+  // EVALUADA es responsable de equipo, sin importar quién responde. Las
+  // preguntas abiertas no se piden en la autoevaluación (nota del usuario):
+  // solo tiene sentido pedirlas sobre otra persona, no sobre uno mismo.
   const questions = (allQuestions as (Question & { applies_to: string })[] | null)?.filter(
-    (q) => q.applies_to === "all" || evaluatee?.is_manager
+    (q) =>
+      (q.applies_to === "all" || evaluatee?.is_manager) &&
+      !(isSelf && q.question_type === "open")
   );
 
   const hasScaleQuestions = (questions as Question[] | null)?.some(

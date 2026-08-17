@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { organizeCycleEvaluators } from "@/app/actions/cycles";
+import EvaluatorPicker from "@/components/EvaluatorPicker";
 
 type ColleagueRow = {
   id: string;
@@ -112,32 +113,23 @@ export default async function CyclePage({
           <form action={organizeCycleEvaluators} className="flex flex-col gap-4">
             <input type="hidden" name="cycleId" value={id} />
 
-            <ul className="border rounded divide-y">
-              {(colleagues as ColleagueRow[] | null)?.map((colleague) => (
-                <li key={colleague.id} className="flex items-center gap-3 px-4 py-3 text-sm">
-                  <input
-                    type="checkbox"
-                    name="evaluatorId"
-                    value={colleague.id}
-                    id={`evaluator-${colleague.id}`}
-                  />
-                  <label htmlFor={`evaluator-${colleague.id}`} className="flex-1">
-                    {colleague.full_name || colleague.email}
-                  </label>
-                  <select
-                    name={`category_${colleague.id}`}
-                    defaultValue="team"
-                    className="border rounded px-2 py-1 text-xs"
-                  >
-                    {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </li>
-              ))}
-            </ul>
+            <EvaluatorPicker
+              colleagues={(colleagues as ColleagueRow[] | null) || []}
+              checkboxName="evaluatorId"
+              renderExtra={(colleague) => (
+                <select
+                  name={`category_${colleague.id}`}
+                  defaultValue="team"
+                  className="border rounded px-2 py-1 text-xs"
+                >
+                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            />
 
             <button
               type="submit"

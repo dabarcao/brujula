@@ -66,6 +66,21 @@ contenido de cada uno y pégalo en el SQL Editor del dashboard de Supabase
   que exigía las preguntas "manager_only" como obligatorias aunque la
   persona evaluada no fuera responsable (bug de 0007, encontrado probando
   el ciclo 360 en el navegador).
+- `0009_fix_cross_template_answers.sql`: limpia datos de prueba
+  contaminados y blinda `submit_feedback_response` contra respuestas a
+  preguntas que no pertenecen a la plantilla de la solicitud.
+- `0010_self_eval_skips_open_questions.sql`: la autoevaluación ya no exige
+  las preguntas abiertas del ciclo 360, solo las de escala.
+- `0011_ad_hoc_request_lifecycle.sql`: una solicitud ágil abierta a la
+  vez; se puede cancelar o modificar (cambiar evaluadores) mientras no
+  tenga respuestas todavía.
+- `0012_ad_hoc_request_types.sql`: tipos de solicitud ágil (reunión,
+  colaboración, liderazgo de iniciativa, general), cada uno con su propia
+  plantilla por defecto.
+- `0013_org_custom_questionnaires.sql`: cuestionarios propios por
+  empresa — sustituyen al de la plataforma en el flujo ágil, se añaden
+  después del bloque por defecto en el ciclo 360
+  (`/dashboard/questionnaires`).
 
 ### Confirmación de email
 
