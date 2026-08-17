@@ -21,6 +21,15 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
+  // El Admin general de plataforma no pertenece a ninguna empresa (sección 2
+  // de la spec): esta comprobación va primero y es excluyente, para que
+  // nunca se le trate como Supervisor de una empresa aunque quedara alguna
+  // fila antigua de "members" asociada a su email.
+  const { data: isPlatformAdmin } = await supabase.rpc("is_platform_admin");
+  if (isPlatformAdmin) {
+    redirect("/admin");
+  }
+
   let { data: member } = await supabase
     .from("members")
     .select("id, is_supervisor, organization_id, organizations(name)")
@@ -53,23 +62,12 @@ export default async function DashboardPage() {
   }
 
   if (!member) {
-    const { data: isAdmin } = await supabase.rpc("is_platform_admin");
-
     return (
       <main className="flex-1 flex items-center justify-center p-8">
         <div className="max-w-md text-center">
-          {isAdmin ? (
-            <>
-              <p className="mb-4">Has entrado como administrador de plataforma.</p>
-              <Link href="/admin" className="underline text-sm">
-                Ir al panel de administración
-              </Link>
-            </>
-          ) : (
-            <p className="mb-4">
-              Tu cuenta todavía no está asociada a ninguna organización.
-            </p>
-          )}
+          <p className="mb-4">
+            Tu cuenta todavía no está asociada a ninguna organización.
+          </p>
           <form action={signOut} className="mt-4">
             <button className="underline text-sm">Cerrar sesión</button>
           </form>

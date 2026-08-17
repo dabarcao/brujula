@@ -68,6 +68,16 @@ export default async function AdminPage({
         </form>
       </div>
 
+      <div className="flex gap-4 mb-8 text-sm">
+        <span className="underline text-gray-700">Empresas</span>
+        <span className="text-gray-400" title="Todavía no disponible">
+          Cuestionarios
+        </span>
+        <span className="text-gray-400" title="Todavía no disponible">
+          Competencias
+        </span>
+      </div>
+
       {inviteUrl && (
         <div className="mb-6 rounded bg-blue-50 text-blue-700 text-sm p-3">
           <p className="mb-2">
@@ -144,6 +154,12 @@ export default async function AdminPage({
                     ? `${org.supervisor_email} (${org.supervisor_status === "active" ? "activo" : "invitado"})`
                     : "sin administrador"}
                 </span>
+                <Link
+                  href={`/admin/empresas/${org.id}`}
+                  className="text-xs underline text-gray-600 whitespace-nowrap"
+                >
+                  Ver empleados
+                </Link>
               </li>
             ))}
           </ul>
