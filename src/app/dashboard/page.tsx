@@ -158,9 +158,6 @@ export default async function DashboardPage() {
             <Link href="/dashboard/cycles/nueva" className="text-sm underline text-gray-700">
               Crear ciclo 360
             </Link>
-            <Link href="/dashboard/questionnaires" className="text-sm underline text-gray-700">
-              Cuestionarios
-            </Link>
           </>
         )}
         <Link href="/dashboard/feedback/nueva" className="text-sm underline text-gray-700">
