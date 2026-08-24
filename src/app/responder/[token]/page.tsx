@@ -78,29 +78,20 @@ export default async function RespondPage({
     .eq("id", invitation.feedback_request_id)
     .maybeSingle();
 
-  const { data: evaluatee } = await supabase
-    .from("members")
-    .select("is_manager")
-    .eq("id", request?.requester_member_id)
-    .maybeSingle();
-
   const questionsQuery = supabase
     .from("survey_questions")
-    .select("id, prompt, required, question_type, applies_to")
+    .select("id, prompt, required, question_type")
     .eq("template_id", request?.template_id)
     .order("position");
 
   const { data: allQuestions } = await questionsQuery;
 
-  // Las preguntas "manager_only" (spec: distinción empleado/responsable, ver
-  // 0006_departments_and_360_template.sql) solo aplican cuando la persona
-  // EVALUADA es responsable de equipo, sin importar quién responde. Las
-  // preguntas abiertas no se piden en la autoevaluación (nota del usuario):
-  // solo tiene sentido pedirlas sobre otra persona, no sobre uno mismo.
-  const questions = (allQuestions as (Question & { applies_to: string })[] | null)?.filter(
-    (q) =>
-      (q.applies_to === "all" || evaluatee?.is_manager) &&
-      !(isSelf && q.question_type === "open")
+  // Las preguntas abiertas no se piden en la autoevaluación (nota del
+  // usuario): solo tiene sentido pedirlas sobre otra persona, no sobre uno
+  // mismo. No hay distinción de rol de la persona evaluada — todas las
+  // preguntas del 360 se hacen a cualquier empleado por igual.
+  const questions = (allQuestions as Question[] | null)?.filter(
+    (q) => !(isSelf && q.question_type === "open")
   );
 
   const hasScaleQuestions = (questions as Question[] | null)?.some(

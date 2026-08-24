@@ -126,9 +126,6 @@ async function main() {
     const name = FAKE_NAMES[i % FAKE_NAMES.length] + (i >= FAKE_NAMES.length ? ` ${i + 1}` : "");
     const email = `empleado${i + 1}@${FAKE_EMAIL_DOMAIN}`;
     const department = departments[i % departments.length];
-    // Uno de cada tres, responsable de equipo: da cobertura de prueba a las
-    // preguntas del ciclo 360 que solo aplican a responsables.
-    const isManager = i % 3 === 2;
 
     try {
       const adminToken = await signIn(adminEmail, adminPassword);
@@ -136,7 +133,6 @@ async function main() {
         p_email: email,
         p_full_name: name,
         p_department_id: department.id,
-        p_is_manager: isManager,
       });
 
       const fakeToken = await signUp(email, FAKE_PASSWORD, {
@@ -154,7 +150,7 @@ async function main() {
       await rpc("accept_member_invite", fakeToken, { p_token: inviteToken });
 
       console.log(
-        `- ${name} <${email}>: creado y activo en ${department.name}${isManager ? " (responsable)" : ""} ` +
+        `- ${name} <${email}>: creado y activo en ${department.name} ` +
           `(contraseña: ${FAKE_PASSWORD}).`
       );
     } catch (err) {

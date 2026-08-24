@@ -7,7 +7,6 @@ type MemberRow = {
   email: string;
   full_name: string | null;
   status: string;
-  is_manager: boolean;
   is_supervisor: boolean;
   department_name: string | null;
   created_at: string;
@@ -84,9 +83,6 @@ export default async function AdminOrganizationMembersPage({
               <div className="flex items-center gap-2">
                 {member.is_supervisor && (
                   <span className="text-xs rounded-full bg-gray-100 px-2 py-1">supervisor</span>
-                )}
-                {member.is_manager && (
-                  <span className="text-xs rounded-full bg-gray-100 px-2 py-1">jefe</span>
                 )}
                 <span
                   className={

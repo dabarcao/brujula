@@ -9,7 +9,6 @@ type MemberRow = {
   email: string;
   full_name: string | null;
   status: string;
-  is_manager: boolean;
   is_supervisor: boolean;
   department_id: string;
   invite_token: string;
@@ -62,7 +61,7 @@ export default async function MembersPage({
 
   const { data: members } = await supabase
     .from("members")
-    .select("id, email, full_name, status, is_manager, is_supervisor, department_id, invite_token, created_at")
+    .select("id, email, full_name, status, is_supervisor, department_id, invite_token, created_at")
     .order("created_at");
 
   const { data: departments } = await supabase
@@ -141,10 +140,6 @@ export default async function MembersPage({
               </option>
             ))}
           </select>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" name="isManager" />
-            Es responsable de equipo
-          </label>
           <button
             type="submit"
             className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800"
@@ -179,9 +174,6 @@ export default async function MembersPage({
             <div className="flex items-center gap-2">
               {member.is_supervisor && (
                 <span className="text-xs rounded-full bg-gray-100 px-2 py-1">admin</span>
-              )}
-              {member.is_manager && (
-                <span className="text-xs rounded-full bg-gray-100 px-2 py-1">responsable</span>
               )}
               <span
                 className={

@@ -1,6 +1,6 @@
 # Brújula — Especificación de producto
 
-*Herramienta de feedback anónimo para empleados. v0.4 — modelo de roles ampliado (Admin general de plataforma, Supervisor, Jefe, Empleado), cuestionarios y marco de competencias centralizados en el Admin general, auto-registro por dominio de empresa, y primer borrador de agrupación de competencias inspirado en los tres principios de las organizaciones teal (Laloux). Ver notas "Pendiente de implementar" en las secciones afectadas: son decisiones de diseño acordadas, el código todavía implementa el modelo anterior (2 roles).*
+*Herramienta de feedback anónimo para empleados. v0.5 — se elimina el rol "Jefe" (todas las preguntas del 360 se hacen a cualquier empleado por igual); "grupos" queda resuelto como sinónimo de `departments`, no un concepto nuevo; marco de competencias con arquitectura de tres niveles (Principio → Competencia → Pregunta) y percentiles calculados con datos de todas las empresas; nueva sección 17 de backlog consolidado. Admin general de plataforma, Supervisor y `/admin` ya están parcialmente implementados — ver notas "Implementado" / "Pendiente de implementar" en cada sección.*
 
 ## 1. Resumen ejecutivo
 
@@ -10,22 +10,24 @@ El reto central del producto no es tanto la interfaz como la arquitectura de con
 
 ## 2. Usuarios y roles
 
-- **Admin general** (rol de plataforma, el proveedor — vosotros): no pertenece a ninguna empresa, identificado por email en una lista de administradores de plataforma. Tiene alta/baja/modificación (ABM) transversal sobre:
+- **Admin general** (rol de plataforma, el proveedor — vosotros): no pertenece a ninguna empresa, identificado por email en una lista de administradores de plataforma (`platform_admins`). Tiene alta/baja/modificación (ABM) transversal sobre:
   - Empresas — **implementado**: crear, listar y renombrar desde `/admin`. Falta desactivar/eliminar.
-  - Usuarios de cualquier empresa (alta individual y masiva) — *pendiente de implementar*, hoy el Admin general solo da de alta al primer Supervisor de una empresa nueva, no gestiona el resto de usuarios.
-  - Grupos — *pendiente de implementar*.
+  - Usuarios de cualquier empresa — **parcialmente implementado**: puede elegir una empresa y ver sus empleados (`/admin/empresas/[id]`, solo lectura). Crear/modificar empleados de una empresa elegida es *pendiente de implementar* — reutilizará la misma función que ya usa el Supervisor (`invite_member`), incluida la carga masiva por fichero cuando se construya (ver sección 17).
   - Plantillas de cuestionarios — preguntas abiertas y de escala (secciones 5.1/5.2) — *pendiente de implementar*; hoy nadie puede crear cuestionarios propios (ver nota de la sección 5.1).
   - Competencias del marco interno de la plataforma (sección 7) — una competencia no se puede eliminar si tiene preguntas de cuestionario asociadas — *pendiente de implementar*.
   - **No** crea ni gestiona ciclos 360 — eso es siempre responsabilidad de la empresa (rol Supervisor).
-- **Supervisor** (RRHH de la empresa — es el rol antes descrito aquí como "Admin de empresa"): ABM de usuarios dentro de su propia empresa, configura y lanza ciclos 360 (seleccionando explícitamente quién participa en cada uno), ve métricas agregadas de su empresa. No ve feedback individual. No define competencias propias ni cuestionarios propios (eso pasa a ser exclusivo del Admin general). **Implementado como una capacidad (`is_supervisor`) sobre un miembro normal, no como un rol excluyente** — así la misma persona puede ser Supervisor y Usuario participante a la vez (pide su propio feedback, hace su propia 360), con una sola cuenta; el mismo patrón que ya usaba `is_manager` ("Jefe"). Un Supervisor por empresa por ahora (impuesto a nivel de base de datos); si se necesita un equipo de varios Supervisores por empresa, queda para más adelante. Grupos dentro de la empresa: *pendiente de implementar*.
-- **Jefe**: rol intermedio dentro de la empresa — recibe/responde las preguntas del ciclo 360 marcadas como "solo responsable" (sección 5.2), sin privilegios de administración. Es el flag `is_manager` ya existente, con el mismo patrón de "capacidad sobre un miembro" que Supervisor.
-- **Empleado**: solicita feedback, responde encuestas/feedback de otros, ve sus propios insights, su gráfico de competencias y sus comparativas.
+- **Supervisor** (RRHH de la empresa — es el rol antes descrito aquí como "Admin de empresa"): configura y lanza ciclos 360 (seleccionando explícitamente quién participa en cada uno), ve métricas agregadas de su empresa. No ve feedback individual. No define competencias propias ni cuestionarios propios (eso pasa a ser exclusivo del Admin general). **Implementado como una capacidad (`is_supervisor`) sobre un miembro normal, no como un rol excluyente** — así la misma persona puede ser Supervisor y Usuario participante a la vez (pide su propio feedback, hace su propia 360), con una sola cuenta. Un Supervisor por empresa por ahora (impuesto a nivel de base de datos); si se necesita un equipo de varios Supervisores por empresa, queda para más adelante.
+  - Usuarios de su empresa: **crear implementado** (invitación uno a uno); **modificar y eliminar (dar de baja) son *pendientes de implementar*** — hoy solo se puede invitar, no editar ni desactivar a alguien ya invitado/activo.
+  - Ciclo 360: crear y seleccionar participantes **implementado**; cambiar la fecha de fin de un ciclo ya lanzado y enviar recordatorios (reminders) son *pendientes de implementar* (los reminders además dependen de tener el envío de email automático resuelto, ver sección 13).
+- **Empleado**: solicita feedback, responde encuestas/feedback de otros, ve sus propios insights, su gráfico de competencias y sus comparativas. **No existe un rol "Jefe" ni ninguna distinción de rol interno de la organización para pedir o responder feedback** — cualquier empleado puede pedir feedback independientemente de su posición; el antiguo flag `is_manager` y la distinción de preguntas "solo responsable" del ciclo 360 se eliminan, todas las preguntas del 360 se hacen a cualquier persona evaluada por igual (ver sección 4.1 y 17).
+
+**"Grupos" = `departments`, resuelto:** no es un concepto nuevo — son la misma tabla de departamentos que ya existe, usada también para agrupar participantes de cara al ciclo 360. El nombre exacto del campo no importa mientras cumpla esa función.
 
 **Alta de usuarios:** por invitación uno a uno (sección 4.3, ya implementado) o por auto-registro cuando el email coincide con el dominio de la empresa (por ejemplo, `pepe@empresa.com` para la empresa `empresa.com`) — **solo** si ese usuario ya existía previamente como registro `inactivo` en la base de datos, precargado por un Supervisor o el Admin general. El dominio por sí solo nunca da acceso a alguien no precargado. *(Pendiente de implementar.)*
 
 > **Implementado:** el alta de empresa ya no es autoservicio público — `/signup` se retiró. El Admin general (identificado por su email en la tabla `platform_admins`) da de alta empresas nuevas desde `/admin`, que queda como Supervisor invitado de esa empresa hasta que completa su alta. Desde fuera de la app solo quedan dos puertas: iniciar sesión o entrar por invitación.
 
-> **Pendiente de implementar:** ABM de usuarios/grupos por parte del Admin general (hoy solo crea la empresa y su primer Supervisor), ABM de cuestionarios y de competencias, grupos dentro de una empresa, y el auto-registro por dominio.
+> **Pendiente de implementar:** ver sección 17 (backlog) para el listado consolidado.
 
 ## 3. Multi-tenancy
 
@@ -43,6 +45,8 @@ Pensado para evaluaciones periódicas (semestrales, por ejemplo). El Supervisor 
 - Otros (por ejemplo, alguien externo al organigrama habitual pero relevante para el ciclo)
 
 El empleado, dentro del ciclo, puede agrupar y organizar a sus evaluadores según estas categorías y su propio criterio (por ejemplo, para pedir feedback equilibrado entre categorías). Esta categorización se usa también para poder, en el futuro, segmentar insights por tipo de relación (aunque en el MVP el análisis puede tratarse de forma agregada, sin desglose por categoría, para no debilitar el anonimato en categorías con pocas personas).
+
+**Nota:** "Jefe / responsable directo" aquí es solo una etiqueta de relación que el empleado elige libremente al organizar sus evaluadores — no depende de que esa persona tenga ningún rol especial en el sistema. No existe un rol "Jefe" en el modelo de usuarios (sección 2); cualquier empleado puede ser categorizado así por otro, sea cual sea su posición real.
 
 **Quién puede ser invitado:** para las categorías jefe/equipo/empresa, el evaluador tiene que ser ya un empleado dado de alta en la organización (ver sección "Alta de empleados" más abajo). La categoría "Otros" es la excepción: puede incluir a alguien externo a la organización, que no llega a ser miembro de la plataforma — le basta su email y el token de invitación de esa solicitud concreta para responder, sin necesidad de crear cuenta ni iniciar sesión.
 
@@ -125,15 +129,20 @@ Además, a nivel técnico:
 - El motor de análisis clasifica el feedback recibido (texto y encuesta) contra este marco único.
 - Este marco de competencias es **interno de la plataforma**: aunque una plantilla esté asignada a una empresa concreta (sección 5), cada pregunta de escala sigue etiquetada contra este mismo marco compartido. Es lo que hace posibles el mapa de competencias global y los futuros percentiles comparables entre departamentos y entre empresas (sección 10). Las preguntas abiertas quedan fuera de este etiquetado directo — su clasificación por competencia la hace el motor de análisis (sección 8), no una etiqueta fija por pregunta; las preguntas de escala, en cambio, requieren competencia obligatoriamente.
 
-**Agrupación interna de competencias — borrador de trabajo, no cerrado:** internamente, las competencias del marco se organizan en tres dominios inspirados en los tres principios de las organizaciones "teal" de Frederic Laloux (*Reinventar las organizaciones*). Es una estructura de análisis, **no se expone con este lenguaje al usuario final** — la empresa/empleado ve las preguntas y resultados sin referencias a "teal" ni a Laloux.
+**Arquitectura de tres niveles — borrador de trabajo, en revisión activa, no cerrado:**
 
-- **Propósito evolutivo**: visión y propósito, toma de decisiones, estrategia, orientación a resultados, visión sistémica, ecología. *Ecología* se entiende como dos ideas relacionadas: uso responsable de recursos (minimizar desperdicio de tiempo/materiales/esfuerzo) y coherencia entre el trabajo diario de la persona y el impacto que la organización dice querer generar.
-- **Equipos autoorganizados**: coaching, mentoring, colaboración, trabajo en equipo, inteligencia interpersonal.
-- **Autenticidad / plenitud**: valores, autenticidad, coraje (valentía), gestión emocional.
+1. **Principio**: los tres principios de las organizaciones "teal" de Frederic Laloux (*Reinventar las organizaciones*) — Propósito evolutivo, Equipos autoorganizados, Plenitud/autenticidad. Es el nivel más alto, interno de la plataforma, **no se expone con este lenguaje al usuario final** — la empresa/empleado ve preguntas y resultados sin referencias a "teal" ni a Laloux.
+2. **Competencia**: cada principio agrupa un conjunto de competencias. Borrador actual (pendiente de que el equipo de producto le dé otra vuelta, no cerrado):
+   - *Propósito evolutivo*: visión y propósito, toma de decisiones, estrategia, orientación a resultados, visión sistémica, ecología. *Ecología* se entiende como dos ideas relacionadas: uso responsable de recursos (minimizar desperdicio de tiempo/materiales/esfuerzo) y coherencia entre el trabajo diario de la persona y el impacto que la organización dice querer generar.
+   - *Equipos autoorganizados*: coaching, mentoring, colaboración, trabajo en equipo, inteligencia interpersonal.
+   - *Plenitud / autenticidad*: valores, autenticidad, coraje (valentía), gestión emocional.
+3. **Pregunta**: cada competencia agrupa las preguntas de escala que la miden — es el nivel que ya existe hoy en el modelo de datos (`competency_code` en `survey_questions`), aunque hoy es texto libre, sin tablas propias para "Principio" ni "Competencia" (ver sección 12).
 
 Nombres y alcance exacto de cada competencia quedan pendientes de afinar — esto es un borrador para poder construir algo tangible, no una lista cerrada.
 
 **Visión de producto (por qué esta estructura):** Brújula es deliberadamente **humanista, no técnica** — no mide desempeño ni skills técnicos. En términos de los cuadrantes de Ken Wilber: el feedback individual entre compañeros vive en el terreno subjetivo/individual (cuadrante 1) — la experiencia de cada persona. Los informes agregados por departamento/empresa permiten leer patrones de cultura compartida (cuadrante 3) — el clima de la organización. El feedback alimenta el cuadrante 1; los informes, el cuadrante 3.
+
+**Informes y percentiles (conecta con sección 10):** la lectura de resultados por competencia se hace mediante percentiles — dónde se sitúa cada empleado y cada organización. Los percentiles se calculan **con los datos de empleados de todas las empresas de la plataforma juntos**, no solo dentro de la propia empresa — un pool de comparación global, no aislado por tenant. Esto requiere el mismo cuidado de anonimato de la sección 10 (umbral mínimo de empresas participantes para que ninguna quede identificable por su posición relativa).
 
 ## 8. Motor de análisis e insights
 
@@ -161,7 +170,7 @@ Esto añade una capa de complejidad que conviene abordar con cuidado antes de co
 
 ## 11. Qué ve cada rol
 
-> **Nota:** tabla pendiente de ampliar con columnas para Admin general y Jefe cuando se implemente el modelo de 4 roles de la sección 2. "Admin de empresa" de esta tabla equivale al rol Supervisor.
+> **Nota:** tabla pendiente de ampliar con una columna para Admin general. "Admin de empresa" de esta tabla equivale al rol Supervisor.
 
 | Vista | Empleado | Supervisor (RRHH empresa) |
 |---|---|---|
@@ -189,7 +198,9 @@ Esto añade una capa de complejidad que conviene abordar con cuidado antes de co
 - `competency_scores` — puntuación acumulada por empleado y competencia, base del gráfico de araña y de futuros percentiles.
 - `aggregate_metrics` — agregados por equipo/departamento, con umbral de k-anonimity aplicado antes de persistir.
 - `platform_settings` — umbrales configurables (mínimo de invitados, mínimo de respuestas) y sus suelos de seguridad.
-- `groups` (pendiente, sección 2) — agrupaciones de usuarios dentro de una empresa, gestionadas por el Supervisor o el Admin general; alcance exacto por definir.
+- `platform_admins` — emails con acceso de Admin general de plataforma; **implementado**, sin relación con `members` (el Admin general no pertenece a ninguna empresa).
+- "Grupos" — **resuelto**: no es una entidad nueva, es la tabla `departments` ya existente (sección 2).
+- Jerarquía de competencias (Principio → Competencia → Pregunta, sección 7) — **pendiente de implementar** como tablas propias; hoy `competency_code` en `survey_questions` es texto libre, sin tabla de competencias ni de principios.
 - Alta de `employees` también podrá darse por coincidencia de dominio de email con la empresa, si el registro ya existe como `inactivo` precargado (secciones 2 y 4.3) — pendiente de implementar.
 
 ## 13. Arquitectura técnica propuesta (piloto en infraestructura gratuita/muy bajo coste)
@@ -225,25 +236,47 @@ Fuera del MVP (fases posteriores):
 - SSO corporativo.
 - Integraciones con calendario/Slack/Teams.
 - App móvil nativa.
-- Rol de manager con visibilidad intermedia — pasa a llamarse "Jefe" en el modelo de roles de la sección 2; alcance y visibilidad exactos todavía por definir en detalle.
-- Desglose de insights por categoría de evaluador (jefe/equipo/empresa/otros).
-- Carga masiva de empleados por archivo (CSV) — en el MVP el alta es uno a uno (sección 4.3). *(Nota: el modelo de roles de la sección 2 ya contempla alta masiva entre las capacidades del Admin general — pendiente decidir si entra en el alcance del piloto o se relega a fase posterior.)*
-- Grupos de usuarios y Admin general de plataforma como panel construido (sección 2) — de momento son decisiones de diseño, no código.
+- Desglose de insights por categoría de evaluador (jefe/equipo/empresa/otros) — la categoría en sí ya existe (sección 4.1), lo que queda fuera del MVP es desglosar el análisis por esa categoría.
+- Carga masiva de empleados por archivo (CSV) — en el MVP el alta es uno a uno (sección 4.3).
 - **Enviar reconocimiento**: función para que un usuario reconozca/valide una skill de otro usuario del sistema (menú de rol Usuario, sección 2). Idea nueva, todavía sin diseñar — queda registrada como futura función, no entra en el piloto actual.
+
+Ver también la sección 17 (backlog) para el listado consolidado de lo que falta construir dentro del alcance ya decidido.
 
 ## 15. Preguntas abiertas a validar antes de construir
 
 - ¿El feedback del ciclo 360 debería tener alguna excepción de anonimato para el jefe directo, o se mantiene el anonimato fuerte también ahí?
-- ¿El benchmarking global (sección 10) es algo que ofreceremos como opt-in por empresa, o vendrá incluido por defecto?
+- El benchmarking global de percentiles (sección 7/10) se calculará con datos de empleados de todas las empresas — ¿alguna empresa podrá excluirse (opt-out) de aportar sus datos a ese pool global, o es obligatorio por diseño para todas?
 - ¿Habrá un plan gratuito/trial para las primeras empresas pequeñas, o se cobra desde el primer cliente?
 - ¿El feedback ágil/individual debe contribuir algo (aunque sea con menor peso) a las métricas agregadas de empresa, o queda completamente fuera de esas métricas como herramienta puramente personal?
-- ¿El rol "Jefe" pasa a ser un rol propio en el modelo de datos, o se mantiene como el atributo `is_manager` ya existente?
-- ¿Qué son exactamente los "grupos" del Admin general/Supervisor — equivalen a los `departments` ya existentes, o es un concepto nuevo y distinto que convive con ellos?
-- ¿La agrupación de competencias en los tres dominios inspirados en Laloux (sección 7) es solo una estructura interna de análisis, o en algún momento se expone al usuario (por ejemplo, en los informes agregados de empresa)?
-- ¿La alta masiva de usuarios (sección 2/4.3) entra en el alcance del piloto actual o se relega a fase posterior?
 
 ## 16. Extensibilidad a otros verticales (visión a futuro)
 
 El caso de uso de partida es B2B con empresas (pymes), pero el núcleo del producto — pedir feedback entre iguales, mantenerlo anónimo con umbrales seguros, destilarlo en un mapa de competencias — no es exclusivo del mundo laboral. Un ejemplo concreto que vale la pena dejar anotado: universidades, donde un alumno podría pedir feedback de compañeros de clase o de proyecto para crecer, de la misma forma que un empleado lo pide de sus compañeros de trabajo. No es una idea original en sí (el peer feedback en educación existe desde hace tiempo), lo valioso aquí es que la arquitectura de Brújula no tenga que rehacerse para servir a un vertical distinto.
 
 Esto no cambia nada del MVP ni de las decisiones ya tomadas, pero sí conviene tenerlo en mente en un punto muy concreto y barato de aplicar ahora: usar en el modelo de datos y en el código nombres neutros donde no cueste nada hacerlo (por ejemplo, pensar en `organizations` en vez de asumir siempre "empresa", y en `members` en vez de asumir siempre "empleado" en las partes internas del sistema), aunque de cara al usuario pyme la interfaz siga hablando en su idioma natural ("tu empresa", "tus compañeros"). Es una decisión de bajo coste que evita un futuro trabajo de renombrado si en algún momento se decide abrir un vertical educativo u otro distinto, sin que suponga ninguna complejidad añadida para el piloto actual.
+
+## 17. Backlog / Funcionalidades pendientes
+
+Listado consolidado de lo que ya está decidido (dentro del alcance actual, no "fuera del MVP") pero todavía no está construido. Cada punto enlaza a la sección que lo explica con más detalle. Es el sitio para mirar primero antes de preguntar "¿esto ya funciona?".
+
+**Admin general de plataforma** (sección 2):
+- ABM de cuestionarios propios y genéricos (5.1/5.2) — hoy nadie puede crear cuestionarios, quedó bloqueado a propósito hasta que exista este panel.
+- ABM del marco de competencias con la arquitectura de tres niveles Principio → Competencia → Pregunta (sección 7) — hoy no hay ni tabla de competencias ni de principios.
+- Crear/modificar empleados de una empresa elegida, incluida carga masiva por fichero — reutilizará la función que ya tiene el Supervisor (`invite_member`). Hoy `/admin/empresas/[id]` solo permite ver, no gestionar.
+- Desactivar o eliminar una empresa ya creada.
+- Informes con percentiles globales entre empresas (sección 7/10) — motor de análisis, agregación y umbral de anonimato entre empresas todavía sin construir.
+
+**Supervisor** (sección 2/4.1):
+- Modificar y dar de baja usuarios ya invitados/activos de su empresa — hoy solo se puede invitar.
+- Cambiar la fecha de fin de un ciclo 360 ya lanzado.
+- Enviar recordatorios (reminders) a quien no ha respondido todavía, incluyéndose a sí mismo — depende de resolver antes el envío de email automático (ver más abajo).
+- Informes de cultura/clima de su propia empresa (sección 8/9) — "que ya los definiremos", según quedó dicho, sin diseño todavía.
+
+**Transversal:**
+- Auto-registro por dominio de empresa (secciones 2 y 4.3).
+- Extender la categorización de evaluador (jefe/equipo/empresa/otros, sección 4.1) al flujo ágil — hoy esa categorización solo existe en el ciclo 360, no en las solicitudes ágiles.
+- Envío de email automático (Resend, sección 13) — hoy toda invitación se comparte a mano copiando un link; esto bloquea los reminders del Supervisor y cualquier notificación automática.
+- Motor de análisis por IA (sección 8) — clasificación de texto libre por competencia, insights progresivos. Diseñado, no construido.
+- Asistente de redacción en el momento de responder feedback (sección 5.1). Diseñado, no construido.
+- Carga masiva de empleados por archivo CSV (sección 4.3/14).
+- **Enviar reconocimiento** (sección 14) — idea nueva, sin diseñar todavía.
