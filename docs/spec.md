@@ -50,6 +50,8 @@ El empleado, dentro del ciclo, puede agrupar y organizar a sus evaluadores segú
 
 **Quién puede ser invitado:** para las categorías jefe/equipo/empresa, el evaluador tiene que ser ya un empleado dado de alta en la organización (ver sección "Alta de empleados" más abajo). La categoría "Otros" es la excepción: puede incluir a alguien externo a la organización, que no llega a ser miembro de la plataforma — le basta su email y el token de invitación de esa solicitud concreta para responder, sin necesidad de crear cuenta ni iniciar sesión.
 
+**Un empleado, un ciclo abierto a la vez:** la empresa sí puede tener varios ciclos 360 simultáneos (por ejemplo, uno con un grupo de empleados ahora y otro distinto con otro grupo dentro de un mes, aunque el primero no haya cerrado todavía) — lo que no puede pasar es que un mismo empleado quede metido en dos ciclos abiertos a la vez. Al crear un ciclo, se rechaza si alguno de los participantes elegidos ya está en otro ciclo de la misma empresa que todavía no ha cerrado (implementado, migración 0023).
+
 ### 4.2 Flujo ágil / espontáneo
 
 El empleado elige personas concretas (mínimo parametrizable, ver sección 6) y solicita feedback puntual y contextual — por ejemplo, sobre una presentación reciente. Este flujo es, ante todo, una herramienta de progresión individual: alimenta el perfil de competencias del empleado, pero por su naturaleza puntual y de bajo volumen pesa menos (o nada, según se decida) en las métricas agregadas de empresa, que se nutren principalmente del ciclo estructurado. En el flujo ágil, el empleado elige entre compañeros ya dados de alta en la organización (no hay categoría "Otros" aquí, esa es propia del ciclo 360).
