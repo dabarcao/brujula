@@ -12,12 +12,19 @@ export default function EvaluatorPicker({
   colleagues,
   checkboxName,
   defaultCheckedIds = [],
-  renderExtra,
+  categoryOptions,
+  categoryDefaultValue,
 }: {
   colleagues: ColleagueRow[];
   checkboxName: string;
   defaultCheckedIds?: string[];
-  renderExtra?: (colleague: ColleagueRow) => React.ReactNode;
+  // Datos, no una función: un Server Component no puede pasar funciones
+  // (como un renderExtra) a un Client Component, no son serializables a
+  // través de esa frontera. Si se necesita un <select> de categoría junto
+  // a cada evaluador, se declara aquí como datos y el propio componente
+  // lo renderiza.
+  categoryOptions?: Record<string, string>;
+  categoryDefaultValue?: string;
 }) {
   const [query, setQuery] = useState("");
 
@@ -55,7 +62,19 @@ export default function EvaluatorPicker({
                 <span className="text-gray-500"> · {colleague.email}</span>
               )}
             </label>
-            {renderExtra?.(colleague)}
+            {categoryOptions && (
+              <select
+                name={`category_${colleague.id}`}
+                defaultValue={categoryDefaultValue}
+                className="border rounded px-2 py-1 text-xs"
+              >
+                {Object.entries(categoryOptions).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            )}
           </li>
         ))}
         {filtered.length === 0 && (

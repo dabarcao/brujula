@@ -55,7 +55,7 @@ export default async function NewCyclePage({
       <p className="text-sm text-gray-600 mb-6">
         Elige quién participa en este ciclo — solo ellos podrán organizar a
         sus evaluadores mientras esté abierto. Se usa la plantilla por
-        defecto de 24 preguntas (escala 1-5 por competencia + 3 preguntas
+        defecto de 31 preguntas (28 de escala, 2 por competencia, + 3
         abiertas).
       </p>
 

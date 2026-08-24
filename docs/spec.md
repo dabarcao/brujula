@@ -124,21 +124,21 @@ Además, a nivel técnico:
 
 ## 7. Marco de competencias
 
-- La plataforma define un **marco de competencias único**, curado y mantenido en exclusiva por el Admin general de plataforma (ABM completo, sección 2). *(Pendiente de implementar — sustituye a la idea anterior de que cada empresa definía sus propias "competencias clave"; las empresas ya no lo hacen, usan siempre el marco único de la plataforma. Revisar también secciones 11 y 14, que todavía reflejan el modelo antiguo.)*
-- Una competencia **no se puede eliminar** si tiene preguntas de cuestionario asociadas, para no romper el histórico de feedback ya clasificado contra ella.
-- El motor de análisis clasifica el feedback recibido (texto y encuesta) contra este marco único.
+- La plataforma define un **marco de competencias único**, curado y mantenido en exclusiva por el Admin general de plataforma. **Implementado como catálogo de datos** (tablas `competency_principles` y `competency_frameworks`, sección 12); el panel de ABM para editarlo desde `/admin` sigue *pendiente de implementar* (sección 17).
+- Una competencia **no se puede eliminar** si tiene preguntas de cuestionario asociadas, para no romper el histórico de feedback ya clasificado contra ella. *(Pendiente de implementar como restricción activa — hoy no hay ABM desde el que intentar borrar una.)*
+- El motor de análisis clasifica el feedback recibido (texto y encuesta) contra este marco único. *(Pendiente, sección 8.)*
 - Este marco de competencias es **interno de la plataforma**: aunque una plantilla esté asignada a una empresa concreta (sección 5), cada pregunta de escala sigue etiquetada contra este mismo marco compartido. Es lo que hace posibles el mapa de competencias global y los futuros percentiles comparables entre departamentos y entre empresas (sección 10). Las preguntas abiertas quedan fuera de este etiquetado directo — su clasificación por competencia la hace el motor de análisis (sección 8), no una etiqueta fija por pregunta; las preguntas de escala, en cambio, requieren competencia obligatoriamente.
 
-**Arquitectura de tres niveles — borrador de trabajo, en revisión activa, no cerrado:**
+**Arquitectura de tres niveles — implementada** (migración 0021, a partir del documento de trabajo "Mapa Competencias"):
 
-1. **Principio**: los tres principios de las organizaciones "teal" de Frederic Laloux (*Reinventar las organizaciones*) — Propósito evolutivo, Equipos autoorganizados, Plenitud/autenticidad. Es el nivel más alto, interno de la plataforma, **no se expone con este lenguaje al usuario final** — la empresa/empleado ve preguntas y resultados sin referencias a "teal" ni a Laloux.
-2. **Competencia**: cada principio agrupa un conjunto de competencias. Borrador actual (pendiente de que el equipo de producto le dé otra vuelta, no cerrado):
-   - *Propósito evolutivo*: visión y propósito, toma de decisiones, estrategia, orientación a resultados, visión sistémica, ecología. *Ecología* se entiende como dos ideas relacionadas: uso responsable de recursos (minimizar desperdicio de tiempo/materiales/esfuerzo) y coherencia entre el trabajo diario de la persona y el impacto que la organización dice querer generar.
-   - *Equipos autoorganizados*: coaching, mentoring, colaboración, trabajo en equipo, inteligencia interpersonal.
-   - *Plenitud / autenticidad*: valores, autenticidad, coraje (valentía), gestión emocional.
-3. **Pregunta**: cada competencia agrupa las preguntas de escala que la miden — es el nivel que ya existe hoy en el modelo de datos (`competency_code` en `survey_questions`), aunque hoy es texto libre, sin tablas propias para "Principio" ni "Competencia" (ver sección 12).
+1. **Principio** (tabla `competency_principles`): los tres principios de las organizaciones "teal" de Frederic Laloux (*Reinventar las organizaciones*) — Propósito evolutivo, Equipo autoorganizado, Plenitud. Interno de la plataforma, **no se expone con este lenguaje al usuario final**.
+2. **Competencia** (tabla `competency_frameworks`, con `principle_id`): 14 competencias en total.
+   - *Propósito evolutivo* (6): visión y propósito, toma de decisiones, orientación a resultados, visión sistémica, ecología, aprendizaje/curiosidad.
+   - *Equipo autoorganizado* (4): coaching, mentoring, colaboración, inteligencia interpersonal.
+   - *Plenitud* (4): valores, autenticidad, coraje, gestión emocional.
+3. **Pregunta**: cada competencia tiene **dos preguntas de escala** que la miden, redactadas como comportamiento observable (ej. "Tiene claro para qué existe su trabajo, más allá de la tarea concreta que hace cada día"). Son las 28 preguntas de escala de la plantilla base del ciclo 360 (`default_360_cycle`), sustituyendo a las 21 anteriores (heredadas del cuestionario original de Zetes, migración 0006). Ciclos ya creados antes de esta migración conservan su propia copia de plantilla, sin verse afectados (sección 5.2).
 
-Nombres y alcance exacto de cada competencia quedan pendientes de afinar — esto es un borrador para poder construir algo tangible, no una lista cerrada.
+Nombres y alcance exacto de cada competencia quedan pendientes de afinar más adelante si hace falta — esto ya no es un borrador sin desarrollar, pero tampoco se considera definitivamente cerrado.
 
 **Visión de producto (por qué esta estructura):** Brújula es deliberadamente **humanista, no técnica** — no mide desempeño ni skills técnicos. En términos de los cuadrantes de Ken Wilber: el feedback individual entre compañeros vive en el terreno subjetivo/individual (cuadrante 1) — la experiencia de cada persona. Los informes agregados por departamento/empresa permiten leer patrones de cultura compartida (cuadrante 3) — el clima de la organización. El feedback alimenta el cuadrante 1; los informes, el cuadrante 3.
 
@@ -192,15 +192,14 @@ Esto añade una capa de complejidad que conviene abordar con cuidado antes de co
 - `feedback_invitations` — a quién se invitó a responder una `feedback_request`, con categoría del evaluador (jefe/equipo/empresa/otros) y token de un solo uso; desacoplada de `feedback_responses` a propósito (sección 6). El invitado puede ser un `employee` (`invitee_employee_id`) o, solo en la categoría "otros" del ciclo 360, alguien externo sin cuenta (`invitee_email`, sección 4.1).
 - `feedback_responses` — contenido recibido, desacoplado de `feedback_requests` tras el envío; una respuesta por pregunta de la plantilla (no un único bloque de texto), ver sección 5.
 - `survey_templates` / `survey_questions` — plantillas de preguntas, cada pregunta con un tipo (`abierta`, `escala` u `opción múltiple`); la plataforma siembra una plantilla por defecto de preguntas abiertas para el flujo ágil (sección 5.1).
-- `competency_frameworks` — marco por defecto de la plataforma.
-- `company_competencies` — competencias propias definidas por cada empresa.
-- `insights` — resultados del motor de análisis, asociados al empleado receptor, nunca al emisor.
-- `competency_scores` — puntuación acumulada por empleado y competencia, base del gráfico de araña y de futuros percentiles.
-- `aggregate_metrics` — agregados por equipo/departamento, con umbral de k-anonimity aplicado antes de persistir.
+- `competency_principles` — los tres principios (Propósito evolutivo, Equipo autoorganizado, Plenitud); **implementado** (sección 7).
+- `competency_frameworks` — las 14 competencias, cada una con `principle_id`; **implementado**. La antigua `org_competencies` (competencias propias por empresa) queda sin usar — las empresas ya no definen las suyas.
+- `insights` — resultados del motor de análisis, asociados al empleado receptor, nunca al emisor. *(Pendiente, sección 8.)*
+- `competency_scores` — puntuación acumulada por empleado y competencia, base del gráfico de araña y de futuros percentiles. *(Pendiente.)*
+- `aggregate_metrics` — agregados por equipo/departamento, con umbral de k-anonimity aplicado antes de persistir. *(Pendiente.)*
 - `platform_settings` — umbrales configurables (mínimo de invitados, mínimo de respuestas) y sus suelos de seguridad.
 - `platform_admins` — emails con acceso de Admin general de plataforma; **implementado**, sin relación con `members` (el Admin general no pertenece a ninguna empresa).
 - "Grupos" — **resuelto**: no es una entidad nueva, es la tabla `departments` ya existente (sección 2).
-- Jerarquía de competencias (Principio → Competencia → Pregunta, sección 7) — **pendiente de implementar** como tablas propias; hoy `competency_code` en `survey_questions` es texto libre, sin tabla de competencias ni de principios.
 - Alta de `employees` también podrá darse por coincidencia de dominio de email con la empresa, si el registro ya existe como `inactivo` precargado (secciones 2 y 4.3) — pendiente de implementar.
 
 ## 13. Arquitectura técnica propuesta (piloto en infraestructura gratuita/muy bajo coste)
@@ -261,7 +260,7 @@ Listado consolidado de lo que ya está decidido (dentro del alcance actual, no "
 
 **Admin general de plataforma** (sección 2):
 - ABM de cuestionarios propios y genéricos (5.1/5.2) — hoy nadie puede crear cuestionarios, quedó bloqueado a propósito hasta que exista este panel.
-- ABM del marco de competencias con la arquitectura de tres niveles Principio → Competencia → Pregunta (sección 7) — hoy no hay ni tabla de competencias ni de principios.
+- ABM del marco de competencias desde `/admin` (sección 7) — el catálogo de datos ya existe (14 competencias, 3 principios), pero solo se puede editar entrando directamente en la base de datos, no hay panel.
 - Crear/modificar empleados de una empresa elegida, incluida carga masiva por fichero — reutilizará la función que ya tiene el Supervisor (`invite_member`). Hoy `/admin/empresas/[id]` solo permite ver, no gestionar.
 - Desactivar o eliminar una empresa ya creada.
 - Informes con percentiles globales entre empresas (sección 7/10) — motor de análisis, agregación y umbral de anonimato entre empresas todavía sin construir.

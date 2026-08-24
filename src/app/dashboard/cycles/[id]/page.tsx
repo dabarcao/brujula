@@ -129,19 +129,8 @@ export default async function CyclePage({
             <EvaluatorPicker
               colleagues={(colleagues as ColleagueRow[] | null) || []}
               checkboxName="evaluatorId"
-              renderExtra={(colleague) => (
-                <select
-                  name={`category_${colleague.id}`}
-                  defaultValue="team"
-                  className="border rounded px-2 py-1 text-xs"
-                >
-                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              )}
+              categoryOptions={CATEGORY_LABELS}
+              categoryDefaultValue="team"
             />
 
             <button
