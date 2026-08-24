@@ -8,6 +8,8 @@ En la mayoría de empresas, el feedback entre compañeros es escaso, tardío y t
 
 Brújula existe para resolver eso: una herramienta de feedback **anónimo de forma fuerte** entre compañeros, disponible de forma continua (no solo una vez al año), que con el tiempo destila ese feedback disperso en un mapa de competencias personal y en patrones de clima organizacional — sin que nadie, ni siquiera quien administra la base de datos, pueda saber quién dijo qué.
 
+**El problema de acceso que resuelve para las pymes:** herramientas de este tipo — instrumentos de *talent assessment* y desarrollo de liderazgo como DISC, Insights Discovery o The Leadership Circle — existen desde hace décadas, pero hoy solo llegan a una empresa por dos caminos, y ninguno le queda a mano a una pyme: construir algo a medida (coste y tiempo que no tiene), o contratar una consultoría que trae consigo esas herramientas comerciales, entregadas por un facilitador certificado, con licencias y honorarios que tampoco están a su alcance. Brújula quiere ser la tercera vía: una suscripción de bajo coste que da acceso de autoservicio a una herramienta potente para crear entornos ricos en feedback, sin necesitar ni equipo de desarrollo propio ni contrato de consultoría.
+
 El reto central del producto no es la interfaz, es la **arquitectura de confianza**. Por eso el anonimato no es una promesa de política de privacidad, es una garantía técnica: se sostiene a nivel de base de datos (Postgres + Row-Level Security en Supabase), no a nivel de aplicación.
 
 **Fundamento de diseño:** Brújula es deliberadamente humanista, no técnica — no mide desempeño ni habilidades técnicas. Dos ideas de fondo dan forma al producto, aunque ninguna se menciona nunca de cara al usuario:
@@ -62,9 +64,9 @@ Lo que queda explícitamente para después del piloto inicial, ya identificado y
 
 ## 5. De aquí en adelante
 
-El plan no es lanzar Brújula "terminada": es llevar este piloto a un puñado de empresas reales, aprender de cómo lo usan de verdad, e iterar el producto con ese aprendizaje antes de invertir en las piezas más pesadas (motor de análisis, informes de clima, benchmarking entre empresas). Solo después de esa fase de validación tiene sentido plantear una expansión más amplia al mercado pyme.
+El enfoque es directo: conseguir una aplicación piloto lista para lanzarla a un **conjunto controlado de empresas**, e iterar con ellas — con su uso real, no con hipótesis — hasta llegar a un **producto comercial potente**. Es ese aprendizaje del piloto controlado el que decide qué se construye después (motor de análisis, informes de clima, benchmarking entre empresas), no al revés. Solo cuando el producto esté validado con ese grupo tiene sentido plantear la expansión más amplia al mercado pyme, apoyada en la propuesta de la sección 1: acceso de autoservicio a algo que hoy solo llega a las pymes a través de consultoría.
 
-Es el momento en el que se busca incorporar a un CTO que construya el producto junto al fundador (que pasa a Product Owner) — no para heredar algo cerrado, sino para formar parte de las decisiones de qué construir a continuación, con el piloto real como guía.
+Es en esta fase donde se busca incorporar a un CTO que construya el producto junto al fundador (que pasa a Product Owner) — no para heredar algo cerrado, sino para formar parte de las decisiones de qué construir a continuación, con el piloto controlado como guía.
 
 ## 6. Cómo seguir
 
