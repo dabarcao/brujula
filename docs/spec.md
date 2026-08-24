@@ -1,6 +1,6 @@
 # Brújula — Especificación de producto
 
-*Herramienta de feedback anónimo para empleados. v0.5 — se elimina el rol "Jefe" (todas las preguntas del 360 se hacen a cualquier empleado por igual); "grupos" queda resuelto como sinónimo de `departments`, no un concepto nuevo; marco de competencias con arquitectura de tres niveles (Principio → Competencia → Pregunta) y percentiles calculados con datos de todas las empresas; nueva sección 17 de backlog consolidado. Admin general de plataforma, Supervisor y `/admin` ya están parcialmente implementados — ver notas "Implementado" / "Pendiente de implementar" en cada sección.*
+*Herramienta de feedback anónimo para empleados. v0.6 — se elimina el rol "Jefe" (todas las preguntas del 360 se hacen a cualquier empleado por igual); "grupos" queda resuelto como sinónimo de `departments`, no un concepto nuevo; marco de competencias con arquitectura de tres niveles (Principio → Competencia → Pregunta), ya poblado con 14 competencias reales y su cuestionario de 28 preguntas de escala; un empleado no puede estar en dos ciclos 360 abiertos a la vez (aunque la empresa sí puede tener varios ciclos simultáneos con participantes distintos); percentiles calculados con datos de todas las empresas. Admin general de plataforma, Supervisor y `/admin` ya están parcialmente implementados — ver notas "Implementado" / "Pendiente de implementar" en cada sección, y la sección 17 para el backlog consolidado.*
 
 ## 1. Resumen ejecutivo
 
@@ -14,7 +14,7 @@ El reto central del producto no es tanto la interfaz como la arquitectura de con
   - Empresas — **implementado**: crear, listar y renombrar desde `/admin`. Falta desactivar/eliminar.
   - Usuarios de cualquier empresa — **parcialmente implementado**: puede elegir una empresa y ver sus empleados (`/admin/empresas/[id]`, solo lectura). Crear/modificar empleados de una empresa elegida es *pendiente de implementar* — reutilizará la misma función que ya usa el Supervisor (`invite_member`), incluida la carga masiva por fichero cuando se construya (ver sección 17).
   - Plantillas de cuestionarios — preguntas abiertas y de escala (secciones 5.1/5.2) — *pendiente de implementar*; hoy nadie puede crear cuestionarios propios (ver nota de la sección 5.1).
-  - Competencias del marco interno de la plataforma (sección 7) — una competencia no se puede eliminar si tiene preguntas de cuestionario asociadas — *pendiente de implementar*.
+  - Competencias del marco interno de la plataforma (sección 7) — el catálogo ya está poblado (3 principios, 14 competencias); el panel de ABM para gestionarlo desde `/admin` (crear/editar/proteger de borrado si tiene preguntas asociadas) es *pendiente de implementar*.
   - **No** crea ni gestiona ciclos 360 — eso es siempre responsabilidad de la empresa (rol Supervisor).
 - **Supervisor** (RRHH de la empresa — es el rol antes descrito aquí como "Admin de empresa"): configura y lanza ciclos 360 (seleccionando explícitamente quién participa en cada uno), ve métricas agregadas de su empresa. No ve feedback individual. No define competencias propias ni cuestionarios propios (eso pasa a ser exclusivo del Admin general). **Implementado como una capacidad (`is_supervisor`) sobre un miembro normal, no como un rol excluyente** — así la misma persona puede ser Supervisor y Usuario participante a la vez (pide su propio feedback, hace su propia 360), con una sola cuenta. Un Supervisor por empresa por ahora (impuesto a nivel de base de datos); si se necesita un equipo de varios Supervisores por empresa, queda para más adelante.
   - Usuarios de su empresa: **crear implementado** (invitación uno a uno); **modificar y eliminar (dar de baja) son *pendientes de implementar*** — hoy solo se puede invitar, no editar ni desactivar a alguien ya invitado/activo.
@@ -187,8 +187,8 @@ Esto añade una capa de complejidad que conviene abordar con cuidado antes de co
 
 ## 12. Modelo de datos (entidades principales, alto nivel)
 
-- `companies` — tenant, plan, estado de facturación.
-- `employees` — pertenece a una company, rol, equipo/departamento; estado `invitado` (solo email, todavía sin cuenta) o `activo` (completó su alta). Dado de alta por RRHH (sección 4.3), nunca se autorregistra.
+- `organizations` — tenant (empresa cliente). *(Nombre real de la tabla desde el principio — sección 16 explica por qué se evitó "companies".)*
+- `members` — pertenece a una organización, rol/capacidades (`is_supervisor`, sección 2), departamento; estado `invited` (solo email, todavía sin cuenta) o `active` (completó su alta). Dado de alta por el Supervisor o el Admin general (sección 4.3), nunca se autorregistra.
 - `feedback_cycles` — ciclos estructurados 360 (fechas, configuración).
 - `feedback_requests` — una petición de feedback (ágil o de ciclo), hecha por un empleado.
 - `feedback_invitations` — a quién se invitó a responder una `feedback_request`, con categoría del evaluador (jefe/equipo/empresa/otros) y token de un solo uso; desacoplada de `feedback_responses` a propósito (sección 6). El invitado puede ser un `employee` (`invitee_employee_id`) o, solo en la categoría "otros" del ciclo 360, alguien externo sin cuenta (`invitee_email`, sección 4.1).
@@ -227,7 +227,7 @@ Incluido:
 - Flujo ágil de solicitud de feedback (texto libre con asistente de redacción básico + encuesta corta).
 - Un ciclo estructurado 360 simple, con categorización de evaluadores (jefe/equipo/empresa/otros).
 - Umbrales parametrizables de invitados mínimos y respuestas mínimas (secc. 6), con valores por defecto 5 y 3.
-- Marco de competencias único de la plataforma, con ABM completo exclusivo del Admin general (sección 7); las empresas ya no definen competencias propias.
+- Marco de competencias único de la plataforma, ya poblado (3 principios, 14 competencias, sección 7); las empresas ya no definen competencias propias. El panel de ABM para editarlo desde `/admin` es *pendiente de implementar* (sección 17) — hoy se edita directamente en la base de datos.
 - Motor de análisis básico: clasificación por competencia + insights progresivos simples.
 - Gráfico de araña de competencias para el empleado.
 - Dashboard de empresa con métricas agregadas mínimas por competencia/equipo.
