@@ -2,7 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createOrganizationAsAdmin, updateOrganizationName } from "@/app/actions/admin";
+import { createOrganizationAsAdmin } from "@/app/actions/admin";
 import { signOut } from "@/app/actions/auth";
 
 type OrganizationRow = {
@@ -138,28 +138,17 @@ export default async function AdminPage({
           <ul className="flex flex-col divide-y border rounded">
             {(organizations as OrganizationRow[]).map((org) => (
               <li key={org.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-                <form action={updateOrganizationName} className="flex items-center gap-2 flex-1">
-                  <input type="hidden" name="orgId" value={org.id} />
-                  <input
-                    name="newName"
-                    defaultValue={org.name}
-                    className="border rounded px-2 py-1 text-sm flex-1"
-                  />
-                  <button type="submit" className="text-xs underline text-gray-600">
-                    Guardar
-                  </button>
-                </form>
+                <Link
+                  href={`/admin/empresas/${org.id}`}
+                  className="font-medium underline flex-1"
+                >
+                  {org.name}
+                </Link>
                 <span className="text-xs text-gray-500 whitespace-nowrap">
                   {org.supervisor_email
                     ? `${org.supervisor_email} (${org.supervisor_status === "active" ? "activo" : "invitado"})`
                     : "sin administrador"}
                 </span>
-                <Link
-                  href={`/admin/empresas/${org.id}`}
-                  className="text-xs underline text-gray-600 whitespace-nowrap"
-                >
-                  Ver empleados
-                </Link>
               </li>
             ))}
           </ul>

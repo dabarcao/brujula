@@ -42,8 +42,8 @@ export async function updateOrganizationName(formData: FormData) {
   });
 
   if (error) {
-    redirect("/admin?error=" + encodeURIComponent(error.message));
+    redirect(`/admin/empresas/${orgId}?error=` + encodeURIComponent(error.message));
   }
 
-  redirect("/admin?updated=1");
+  redirect(`/admin/empresas/${orgId}?updated=1`);
 }
