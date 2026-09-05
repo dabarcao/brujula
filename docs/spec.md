@@ -1,6 +1,6 @@
 # Brújula — Especificación de producto
 
-*Herramienta de feedback anónimo para empleados. v0.6 — se elimina el rol "Jefe" (todas las preguntas del 360 se hacen a cualquier empleado por igual); "grupos" queda resuelto como sinónimo de `departments`, no un concepto nuevo; marco de competencias con arquitectura de tres niveles (Principio → Competencia → Pregunta), ya poblado con 14 competencias reales y su cuestionario de 28 preguntas de escala; un empleado no puede estar en dos ciclos 360 abiertos a la vez (aunque la empresa sí puede tener varios ciclos simultáneos con participantes distintos); percentiles calculados con datos de todas las empresas. Admin general de plataforma, Supervisor y `/admin` ya están parcialmente implementados — ver notas "Implementado" / "Pendiente de implementar" en cada sección, y la sección 17 para el backlog consolidado.*
+*Herramienta de feedback anónimo para empleados. v0.7 — se añaden los primeros informes reales de competencias: por solicitud ágil "por competencias" (con percentil de empresa y percentil global), agregado por empleado ("Mi mapa de competencias", junta todo su feedback ya revelado) y agregado de toda la empresa (solo Supervisor); el ciclo 360 muestra un comparativo autoevaluación vs. media de los demás; se añade un tipo de pregunta experimental "por competencias" (quien responde elige la competencia y da nota + texto); el Supervisor ya no puede ser invitado a dar feedback (ni en el flujo ágil ni en el 360); se puede editar los evaluadores y su categoría de un ciclo 360 ya organizado, igual que ya se podía en una solicitud ágil; nuevo panel para el Supervisor con el estado (no iniciado / en progreso / completado) de cada participante de sus ciclos 360. Ver notas "Implementado" / "Pendiente de implementar" en cada sección, y la sección 17 para el backlog consolidado.*
 
 ## 1. Resumen ejecutivo
 
@@ -51,6 +51,12 @@ El empleado, dentro del ciclo, puede agrupar y organizar a sus evaluadores segú
 **Quién puede ser invitado:** para las categorías jefe/equipo/empresa, el evaluador tiene que ser ya un empleado dado de alta en la organización (ver sección "Alta de empleados" más abajo). La categoría "Otros" es la excepción: puede incluir a alguien externo a la organización, que no llega a ser miembro de la plataforma — le basta su email y el token de invitación de esa solicitud concreta para responder, sin necesidad de crear cuenta ni iniciar sesión.
 
 **Un empleado, un ciclo abierto a la vez:** la empresa sí puede tener varios ciclos 360 simultáneos (por ejemplo, uno con un grupo de empleados ahora y otro distinto con otro grupo dentro de un mes, aunque el primero no haya cerrado todavía) — lo que no puede pasar es que un mismo empleado quede metido en dos ciclos abiertos a la vez. Al crear un ciclo, se rechaza si alguno de los participantes elegidos ya está en otro ciclo de la misma empresa que todavía no ha cerrado (implementado, migración 0023).
+
+**El Supervisor no puede ser invitado como evaluador** (implementado, migración 0032): puede seguir siendo *participante* de un ciclo (recibir su propia evaluación 360), pero no aparece como opción al elegir a quién se pide feedback — ni en el ciclo 360 ni en el flujo ágil (sección 4.2). Se refuerza tanto en la interfaz como dentro de las funciones RPC correspondientes, para que no dependa solo de lo que la interfaz permita seleccionar.
+
+**Editar evaluadores de un ciclo ya organizado** (implementado, migración 0034): mientras nadie haya respondido todavía, un participante puede volver a entrar y cambiar tanto a quién eligió como evaluador como su categoría — igual que ya funcionaba para una solicitud ágil (sección 4.2). En cuanto hay alguna respuesta, deja de poder modificarse.
+
+**Panel de estado para el Supervisor** (implementado, migración 0035): desde `/dashboard/cycles`, el Supervisor ve la lista de sus ciclos 360 y, al entrar en uno, el estado de cada participante — *no iniciado* (no ha organizado sus evaluadores todavía), *en progreso* (los organizó, faltan respuestas) o *completado* (respondieron todos, o ya venció el ciclo) — sin ver contenido alguno, solo el estado de avance.
 
 ### 4.2 Flujo ágil / espontáneo
 
@@ -103,6 +109,8 @@ Preguntas cerradas (escala, opción múltiple), definidas por la plataforma o co
 
 **Cuestionario propio del ciclo 360:** aquí el patrón es distinto al del flujo ágil (sección 5.1): las preguntas de escala específicas de una empresa **se añaden** después del bloque base de preguntas por defecto de la plataforma, no lo sustituyen. Esa sección propia la crea el Admin general de plataforma y la asigna a la empresa concreta (sección 2) — no es la empresa quien la redacta directamente. Cada ciclo nuevo que se crea copia ese bloque base más la sección asignada a la empresa (si existe) a su propia plantilla, así los cambios posteriores al cuestionario no afectan a ciclos ya en marcha. *(Pendiente de implementar — cambia "quién" crea la sección propia; el patrón aditivo en sí se mantiene.)*
 
+**Tipo de pregunta "por competencias" (implementado, migración 0026 — experimental):** un cuarto tipo de pregunta, además de abierta/escala/opción múltiple, pensado para el flujo ágil. Quien responde elige entre 1 y un máximo configurable (por pregunta, `max_selections`) de competencias del marco, y por cada una elegida da un valor de 1 a 5 **y** un comentario libre — a diferencia de la escala (competencia fija por pregunta) o la abierta (sin competencia, clasificada después por IA), aquí es la propia persona quien etiqueta la competencia a mano. Se añadió como una opción más, sin sustituir ninguna de las anteriores — queda pendiente decidir cuál de todos los tipos se usa finalmente en producción. Existe una plantilla ágil de prueba, `ad_hoc_competencias` ("Feedback por competencias"), con 3 preguntas de este tipo.
+
 ### 5.3 Pregunta con imagen (fuera del MVP, roadmap futuro)
 
 Un tercer formato a futuro: el evaluador elige una imagen de un conjunto predefinido (por ejemplo, representando estilos de trabajo o actitudes) y añade un comentario corto justificando la elección. Es un formato más lúdico y rápido de responder que el texto libre, útil para aumentar la tasa de respuesta en según qué contextos. No entra en el MVP, pero queda registrado como tercer tipo de pregunta a evaluar en una fase posterior, junto a texto libre y encuesta.
@@ -144,7 +152,13 @@ Nombres y alcance exacto de cada competencia quedan pendientes de afinar más ad
 
 **Visión de producto (por qué esta estructura):** Brújula es deliberadamente **humanista, no técnica** — no mide desempeño ni skills técnicos. En términos de los cuadrantes de Ken Wilber: el feedback individual entre compañeros vive en el terreno subjetivo/individual (cuadrante 1) — la experiencia de cada persona. Los informes agregados por departamento/empresa permiten leer patrones de cultura compartida (cuadrante 3) — el clima de la organización. El feedback alimenta el cuadrante 1; los informes, el cuadrante 3.
 
-**Informes y percentiles (conecta con sección 10):** la lectura de resultados por competencia se hace mediante percentiles — dónde se sitúa cada empleado y cada organización. Los percentiles se calculan **con los datos de empleados de todas las empresas de la plataforma juntos**, no solo dentro de la propia empresa — un pool de comparación global, no aislado por tenant. Esto requiere el mismo cuidado de anonimato de la sección 10 (umbral mínimo de empresas participantes para que ninguna quede identificable por su posición relativa).
+**Informes y percentiles (conecta con sección 10) — parcialmente implementado:**
+
+- El informe de una solicitud ágil "por competencias" (sección 5.2) muestra, por competencia: nota media, y **dos percentiles** — uno calculado solo contra solicitudes de la misma empresa, otro contra todas las solicitudes de la plataforma (migraciones 0027/0031). No se muestran respuestas individuales ni el texto libre (se reserva para una futura integración con IA). Con el volumen de datos todavía bajo, el percentil es poco fiable a propósito hoy — se prefirió tener el mecanismo ya construido a esperar a tener masa crítica.
+- **"Mi mapa de competencias"** (implementado, migración 0028): un radar agregado por empleado, juntando *todo* el feedback ya revelado que ha recibido (flujo ágil + ciclos 360, sin autoevaluación), con nota media por competencia y por dimensión — sin percentil todavía, solo la media.
+- **Mapa de competencias de la empresa** (implementado, migración 0030): el mismo radar pero agregando a todos los empleados de la organización, visible solo para el Supervisor.
+- **Comparativo del ciclo 360** (implementado, migración 0029): el informe de una solicitud de ciclo muestra un radar con dos series — la autoevaluación del empleado y la media de los demás — pero todavía en **nota** (1-5), no en percentil. Pasarlo a percentil es un cambio identificado pero no construido: haría falta una función que calcule el percentil de la autoevaluación y de la media de los demás (en vez de la nota directa) y generalizar el componente de radar para que acepte una escala 0-100 en vez de 1-5; ningún cambio de esquema de base de datos hace falta.
+- El diseño de fondo sigue siendo el original: los percentiles deberían poder calcularse **con los datos de empleados de todas las empresas de la plataforma juntos**, no solo dentro de la propia empresa — un pool de comparación global, no aislado por tenant (lo que hoy existe para el informe "por competencias" ya sigue este principio, calculando el percentil global además del de empresa). Esto requiere el mismo cuidado de anonimato de la sección 10 (umbral mínimo de empresas participantes para que ninguna quede identificable por su posición relativa) — todavía no aplicado, ver sección 10.
 
 ## 8. Motor de análisis e insights
 
@@ -157,16 +171,16 @@ El feedback se procesa de forma asíncrona, no en el momento del envío, mediant
 
 ## 9. Visualización de resultados
 
-- **Empleado**: gráfico de araña (radar chart) con sus competencias evaluadas, mostrando visualmente fortalezas y áreas de mejora de un vistazo, actualizado a medida que llega feedback suficiente para cada competencia (respetando el umbral de la sección 6).
-- **Empresa**: vistas agregadas por equipo/departamento sobre las mismas competencias, para detectar patrones de clima o necesidades de desarrollo colectivas.
+- **Empleado — implementado**: gráfico de araña (radar chart, SVG hecho a mano, sin librería) con las 14 competencias agrupadas por color según su dimensión (Propósito evolutivo / Equipo autoorganizado / Plenitud), en "Mi mapa de competencias" (sección 7) — agregado de todo el feedback ya revelado, actualizado a medida que llega feedback suficiente para cada competencia (respetando el umbral de la sección 6). En el informe de un ciclo 360 concreto, el mismo radar compara la autoevaluación (en negro) contra la media de los demás (color por dimensión).
+- **Empresa — implementado**: el Supervisor ve el mismo tipo de radar pero agregando a todos los empleados de la organización ("Mapa de competencias de la empresa", sección 7). Vistas agregadas por equipo/departamento (no solo por toda la empresa junta) siguen *pendientes de implementar*.
 
 ## 10. Métricas comparativas y benchmarking (percentiles)
 
-Idea marcada explícitamente para desarrollar con más detalle en una fase posterior, pero que queremos dejar recogida desde ya porque es una oportunidad de valor diferencial: que el empleado pueda ver, para cada competencia, cómo se sitúa respecto a la media de su empresa y respecto a la media global de todas las empresas que usan la plataforma (percentiles).
+**Parcialmente implementado** (sección 7): el informe de una solicitud ágil "por competencias" ya muestra, para cada competencia, un percentil de empresa y un percentil global — calculados comparando la nota media de esa solicitud contra la de todas las demás solicitudes (de la misma empresa, o de toda la plataforma) que puntuaron esa competencia. Es una primera versión funcional de la idea de esta sección, no todavía el diseño completo — sigue sin aplicarse ni al mapa agregado por empleado/empresa (solo nota media, sin percentil) ni al comparativo del ciclo 360 (autoevaluación vs. media, también solo en nota).
 
-Esto añade una capa de complejidad que conviene abordar con cuidado antes de construirla:
+Esto añade una capa de complejidad que conviene abordar con cuidado antes de construirla del todo:
 
-- Requiere agregar datos **entre empresas** (no solo dentro de una empresa), lo que implica diseñar el pool de benchmarking global de forma que ninguna empresa pequeña sea identificable a partir de su posición relativa en ese agregado (mismo principio de umbral mínimo que en la sección 6, aplicado ahora a nivel de "empresas participantes en el cálculo", no solo de personas).
+- Requiere agregar datos **entre empresas** (no solo dentro de una empresa), lo que implica diseñar el pool de benchmarking global de forma que ninguna empresa pequeña sea identificable a partir de su posición relativa en ese agregado (mismo principio de umbral mínimo que en la sección 6, aplicado ahora a nivel de "empresas participantes en el cálculo", no solo de personas). **El percentil global ya implementado (sección 7) todavía no aplica este umbral** — con pocas empresas en la plataforma, es un riesgo real, no solo teórico, y conviene resolverlo antes de tener clientes reales usándolo.
 - Hay que decidir si el benchmarking global es opt-in por empresa (algunas organizaciones podrían no querer que sus datos agregados, aunque anonimizados, alimenten comparativas de mercado) o viene incluido por defecto en el servicio.
 - Probablemente no forma parte del MVP (ver sección 13), pero el modelo de datos del MVP debería dejar hueco para incorporarlo sin fricción (por ejemplo, guardando resultados de competencia de forma que sea sencillo recalcular percentiles después).
 
@@ -177,11 +191,14 @@ Esto añade una capa de complejidad que conviene abordar con cuidado antes de co
 | Vista | Empleado | Supervisor (RRHH empresa) |
 |---|---|---|
 | Feedback recibido (texto/encuesta) | Sí, sin saber quién lo envió, solo si se supera el umbral mínimo | No |
-| Gráfico de araña de competencias propio | Sí | No |
-| Comparativa vs. media de empresa / media global | Sí (fase posterior) | No |
-| Métricas agregadas por equipo/departamento | No | Sí, con umbral mínimo aplicado |
+| Gráfico de araña de competencias propio ("Mi mapa de competencias") | Sí | No |
+| Percentil de empresa / percentil global (informe "por competencias") | Sí | No |
+| Comparativa autoevaluación vs. media de los demás (ciclo 360) | Sí, en nota — percentil pendiente (sección 7/10) | No |
+| Mapa de competencias agregado de toda la empresa | No | Sí |
+| Métricas agregadas por equipo/departamento | No | *Pendiente de implementar* (hoy solo existe agregado de toda la empresa junta, sección 9) |
 | Definición de competencias del marco | No | No — exclusivo del Admin general (sección 7) |
-| Estado de ciclos 360 (progreso de participación, sin contenido) | — | Sí |
+| Estado de ciclos 360 (progreso de participación, sin contenido) | — | Sí, implementado (`/dashboard/cycles`, sección 4.1) |
+| Ser invitado a dar feedback (ágil o como evaluador del 360) | — | No, nunca (sección 4.1) |
 | Gestión de usuarios (de su empresa) | No | Sí |
 | Gestión de empresas y facturación | No | No — exclusivo del Admin general |
 
@@ -189,16 +206,18 @@ Esto añade una capa de complejidad que conviene abordar con cuidado antes de co
 
 - `organizations` — tenant (empresa cliente). *(Nombre real de la tabla desde el principio — sección 16 explica por qué se evitó "companies".)*
 - `members` — pertenece a una organización, rol/capacidades (`is_supervisor`, sección 2), departamento; estado `invited` (solo email, todavía sin cuenta) o `active` (completó su alta). Dado de alta por el Supervisor o el Admin general (sección 4.3), nunca se autorregistra.
-- `feedback_cycles` — ciclos estructurados 360 (fechas, configuración).
+- `feedback_cycles` — ciclos estructurados 360 (fechas, configuración, plantilla propia copiada al crear el ciclo).
+- `feedback_cycle_participants` — quién fue seleccionado como participante de un ciclo (puede organizar sus propios evaluadores); **implementado** (sección 4.1). Solo el propio participante o el Supervisor (vía función `get_cycle_status`, sección 4.1) pueden verla — no es de lectura libre por RLS.
 - `feedback_requests` — una petición de feedback (ágil o de ciclo), hecha por un empleado.
-- `feedback_invitations` — a quién se invitó a responder una `feedback_request`, con categoría del evaluador (jefe/equipo/empresa/otros) y token de un solo uso; desacoplada de `feedback_responses` a propósito (sección 6). El invitado puede ser un `employee` (`invitee_employee_id`) o, solo en la categoría "otros" del ciclo 360, alguien externo sin cuenta (`invitee_email`, sección 4.1).
+- `feedback_invitations` — a quién se invitó a responder una `feedback_request`, con categoría del evaluador (jefe/equipo/empresa/otros, o `self` para la autoevaluación del ciclo 360) y token de un solo uso; desacoplada de `feedback_responses` a propósito (sección 6). El invitado puede ser un `employee` (`invitee_employee_id`) o, solo en la categoría "otros" del ciclo 360, alguien externo sin cuenta (`invitee_email`, sección 4.1). El propio solicitante sí puede ver a quién invitó (implementado, migración 0033) — lo protegido es quién respondió, no a quién se invitó.
 - `feedback_responses` — contenido recibido, desacoplado de `feedback_requests` tras el envío; una respuesta por pregunta de la plantilla (no un único bloque de texto), ver sección 5.
-- `survey_templates` / `survey_questions` — plantillas de preguntas, cada pregunta con un tipo (`abierta`, `escala` u `opción múltiple`); la plataforma siembra una plantilla por defecto de preguntas abiertas para el flujo ágil (sección 5.1).
+- `survey_templates` / `survey_questions` — plantillas de preguntas, cada pregunta con un tipo (`abierta`, `escala`, `opción múltiple` o, experimental, `por competencias` — sección 5.2, con `max_selections`); la plataforma siembra una plantilla por defecto de preguntas abiertas para el flujo ágil (sección 5.1).
 - `competency_principles` — los tres principios (Propósito evolutivo, Equipo autoorganizado, Plenitud); **implementado** (sección 7).
 - `competency_frameworks` — las 14 competencias, cada una con `principle_id`; **implementado**. La antigua `org_competencies` (competencias propias por empresa) queda sin usar — las empresas ya no definen las suyas.
+- `feedback_answers` — una respuesta por pregunta; para el tipo "por competencias" (sección 5.2) guarda además qué `competency_code` eligió quien respondió, ya que no viene fijado por la pregunta.
 - `insights` — resultados del motor de análisis, asociados al empleado receptor, nunca al emisor. *(Pendiente, sección 8.)*
-- `competency_scores` — puntuación acumulada por empleado y competencia, base del gráfico de araña y de futuros percentiles. *(Pendiente.)*
-- `aggregate_metrics` — agregados por equipo/departamento, con umbral de k-anonimity aplicado antes de persistir. *(Pendiente.)*
+- **No existe una tabla `competency_scores` persistida** — los informes de competencias (sección 7: por solicitud, agregado por empleado, agregado de empresa) se calculan al vuelo con funciones SQL (`security definer`) sobre `feedback_answers`/`feedback_responses`, no sobre una tabla de puntuaciones acumuladas. Funciona bien al volumen actual; si el cálculo se vuelve caro habría que revisar esta decisión.
+- `aggregate_metrics` — agregados por equipo/departamento, con umbral de k-anonimity aplicado antes de persistir. *(Pendiente — hoy el único agregado de empresa existente es "toda la empresa junta", sin desglose por equipo, sección 9.)*
 - `platform_settings` — umbrales configurables (mínimo de invitados, mínimo de respuestas) y sus suelos de seguridad.
 - `platform_admins` — emails con acceso de Admin general de plataforma; **implementado**, sin relación con `members` (el Admin general no pertenece a ninguna empresa).
 - "Grupos" — **resuelto**: no es una entidad nueva, es la tabla `departments` ya existente (sección 2).
@@ -265,13 +284,16 @@ Listado consolidado de lo que ya está decidido (dentro del alcance actual, no "
 - ABM del marco de competencias desde `/admin` (sección 7) — el catálogo de datos ya existe (14 competencias, 3 principios), pero solo se puede editar entrando directamente en la base de datos, no hay panel.
 - Crear/modificar empleados de una empresa elegida, incluida carga masiva por fichero — reutilizará la función que ya tiene el Supervisor (`invite_member`). Hoy `/admin/empresas/[id]` solo permite ver, no gestionar.
 - Desactivar o eliminar una empresa ya creada.
-- Informes con percentiles globales entre empresas (sección 7/10) — motor de análisis, agregación y umbral de anonimato entre empresas todavía sin construir.
+- **Percentil global sin umbral mínimo de empresas participantes (sección 10) — pendiente, y es un riesgo real de anonimato, no solo teórico:** ya existe un percentil global (sección 7), pero calculado sin exigir un mínimo de empresas en el pool de comparación. Con pocas empresas en la plataforma, la posición relativa podría llegar a identificar a una empresa pequeña. Conviene resolverlo antes de tener clientes reales usando ese informe.
+- Aplicar percentil (en vez de solo nota media) al mapa agregado por empleado, al mapa agregado de empresa, y al comparativo autoevaluación-vs-media del ciclo 360 (sección 7) — hoy el percentil doble (empresa/global) solo existe en el informe de una solicitud ágil "por competencias".
+- Motor de análisis y agregación por IA de las respuestas de texto libre del tipo "por competencias" (sección 5.2) — se guardan pero no se muestran todavía.
+- Decidir qué tipo de pregunta se usa finalmente en producción — hoy conviven abierta/escala/opción múltiple/"por competencias" (experimental, sección 5.2) sin haberse descartado ninguna.
 
 **Supervisor** (sección 2/4.1):
 - Modificar y dar de baja usuarios ya invitados/activos de su empresa — hoy solo se puede invitar.
 - Cambiar la fecha de fin de un ciclo 360 ya lanzado.
 - Enviar recordatorios (reminders) a quien no ha respondido todavía, incluyéndose a sí mismo — depende de resolver antes el envío de email automático (ver más abajo).
-- Informes de cultura/clima de su propia empresa (sección 8/9) — "que ya los definiremos", según quedó dicho, sin diseño todavía.
+- Informes agregados por equipo/departamento (sección 8/9) — hoy el único agregado de empresa es "toda la empresa junta" (mapa de competencias de empresa, sección 7), sin desglose por equipo todavía.
 
 **Transversal:**
 - Auto-registro por dominio de empresa (secciones 2 y 4.3).
