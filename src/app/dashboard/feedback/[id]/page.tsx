@@ -178,7 +178,7 @@ export default async function FeedbackRequestPage({
 
   const { data: request } = await supabase
     .from("feedback_requests")
-    .select("id, created_at, requester_member_id, request_type, status")
+    .select("id, created_at, requester_member_id, request_type, status, cycle_id")
     .eq("id", id)
     .maybeSingle();
 
@@ -195,6 +195,31 @@ export default async function FeedbackRequestPage({
     | null;
 
   const revealed = progress?.revealed ?? false;
+
+  // "Definitivo" cuando ya no puede cambiar más: la solicitud se cerró a
+  // mano, respondieron todos los invitados, o (en un ciclo 360) ya pasó la
+  // fecha de cierre. Mientras tanto, si ya se reveló, es "preliminar" —
+  // puede variar según sigan llegando respuestas.
+  const { count: totalInvitees } = await supabase
+    .from("feedback_invitations")
+    .select("id", { count: "exact", head: true })
+    .eq("feedback_request_id", id);
+
+  let cycleClosesAt: string | null = null;
+  if (request.request_type === "cycle" && request.cycle_id) {
+    const { data: cycle } = await supabase
+      .from("feedback_cycles")
+      .select("closes_at")
+      .eq("id", request.cycle_id)
+      .maybeSingle();
+    cycleClosesAt = cycle?.closes_at ?? null;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const isFinal =
+    request.status === "closed" ||
+    (totalInvitees != null && (progress?.response_count ?? 0) >= totalInvitees) ||
+    (cycleClosesAt != null && cycleClosesAt < today);
 
   // La autoevaluación no se muestra aquí (texto/escala en crudo): queda
   // guardada para una futura comparativa con gráfica frente a la media
@@ -298,14 +323,34 @@ export default async function FeedbackRequestPage({
       )}
 
       <section>
-        <h2 className="text-sm font-medium text-gray-500 mb-4">Respuestas de compañeros</h2>
+        <div className="flex items-center gap-2 mb-4">
+          <h2 className="text-sm font-medium text-gray-500">Respuestas de compañeros</h2>
+          {revealed && (
+            <span
+              className={
+                "text-xs rounded-full px-2 py-0.5 " +
+                (isFinal ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700")
+              }
+            >
+              {isFinal ? "definitivo" : "preliminar"}
+            </span>
+          )}
+        </div>
         {!revealed ? (
           <p className="text-sm text-gray-600">
             Han respondido {progress?.response_count ?? 0} de {progress?.threshold ?? 3}{" "}
             necesarias para poder ver algo. Nadie sabe quién ha respondido ya.
           </p>
         ) : (
-          <QuestionGroupList groups={peerGroups} />
+          <>
+            {!isFinal && (
+              <p className="text-xs text-gray-500 mb-4">
+                Todavía puede cambiar: faltan respuestas por llegar
+                {cycleClosesAt ? ` o que se cierre el ${cycleClosesAt}` : ""}.
+              </p>
+            )}
+            <QuestionGroupList groups={peerGroups} />
+          </>
         )}
       </section>
     </main>
