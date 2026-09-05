@@ -15,6 +15,7 @@ const SUBTYPE_LABELS: Record<string, string> = {
   meeting: "Reunión / presentación",
   collaboration: "Colaboración",
   leadership_initiative: "Liderazgo de una iniciativa",
+  competencias: "Por competencias (experimental)",
 };
 
 export default async function NewFeedbackRequestPage({

@@ -2,17 +2,24 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { submitFeedbackResponse } from "@/app/actions/feedback";
+import CompetencyPicker from "@/components/CompetencyPicker";
 
 type Question = {
   id: string;
   prompt: string;
   required: boolean;
   question_type: string;
+  max_selections: number | null;
 };
 
 type ScaleLevel = {
   level: number;
   label: string;
+};
+
+type CompetencyOption = {
+  code: string;
+  name: string;
 };
 
 export default async function RespondPage({
@@ -80,7 +87,7 @@ export default async function RespondPage({
 
   const questionsQuery = supabase
     .from("survey_questions")
-    .select("id, prompt, required, question_type")
+    .select("id, prompt, required, question_type, max_selections")
     .eq("template_id", request?.template_id)
     .order("position");
 
@@ -98,8 +105,16 @@ export default async function RespondPage({
     (q) => q.question_type === "scale"
   );
 
+  const hasCompetencyQuestions = (questions as Question[] | null)?.some(
+    (q) => q.question_type === "competency"
+  );
+
   const { data: scaleLevels } = hasScaleQuestions
     ? await supabase.from("rating_scale_levels").select("level, label").order("level")
+    : { data: null };
+
+  const { data: competencies } = hasCompetencyQuestions
+    ? await supabase.from("competency_frameworks").select("code, name").order("name")
     : { data: null };
 
   return (
@@ -149,6 +164,12 @@ export default async function RespondPage({
                   </label>
                 ))}
               </div>
+            ) : question.question_type === "competency" ? (
+              <CompetencyPicker
+                questionId={question.id}
+                competencies={(competencies as CompetencyOption[] | null) || []}
+                maxSelections={question.max_selections || 1}
+              />
             ) : (
               <textarea
                 name={`answer_${question.id}`}

@@ -12,7 +12,13 @@ import EvaluatorPicker from "@/components/EvaluatorPicker";
 type FlatAnswerRow = {
   answer_text: string | null;
   answer_value: number | null;
+  competency_code: string | null;
   survey_questions: { prompt: string; position: number; question_type: string } | null;
+};
+
+type CompetencyEntry = {
+  value: number | null;
+  text: string | null;
 };
 
 type QuestionGroup = {
@@ -20,6 +26,7 @@ type QuestionGroup = {
   position: number;
   questionType: string;
   answers: string[];
+  competencyEntries: Array<{ competencyName: string; entries: CompetencyEntry[] }>;
 };
 
 async function loadQuestionGroups(
@@ -30,30 +37,72 @@ async function loadQuestionGroups(
   const { data } = await supabase
     .from("feedback_answers")
     .select(
-      "answer_text, answer_value, survey_questions(prompt, position, question_type), feedback_responses!inner(feedback_request_id, is_self)"
+      "answer_text, answer_value, competency_code, survey_questions(prompt, position, question_type), feedback_responses!inner(feedback_request_id, is_self)"
     )
     .eq("feedback_responses.feedback_request_id", requestId)
     .eq("feedback_responses.is_self", isSelf);
 
-  const groupsByPrompt = new Map<string, QuestionGroup>();
+  const { data: competencyRows } = await supabase
+    .from("competency_frameworks")
+    .select("code, name");
+  const competencyNameByCode = new Map(
+    ((competencyRows as { code: string; name: string }[] | null) || []).map((c) => [c.code, c.name])
+  );
+
+  const groupsByPrompt = new Map<
+    string,
+    { position: number; questionType: string; answers: string[]; competencyMap: Map<string, CompetencyEntry[]> }
+  >();
+
   for (const row of (data as unknown as FlatAnswerRow[] | null) || []) {
     if (!row.survey_questions) continue;
-    const display = row.answer_value != null ? `${row.answer_value} / 5` : row.answer_text;
-    if (!display) continue;
     const { prompt, position, question_type } = row.survey_questions;
     if (!groupsByPrompt.has(prompt)) {
-      groupsByPrompt.set(prompt, { prompt, position, questionType: question_type, answers: [] });
+      groupsByPrompt.set(prompt, {
+        position,
+        questionType: question_type,
+        answers: [],
+        competencyMap: new Map(),
+      });
     }
-    groupsByPrompt.get(prompt)!.answers.push(display);
+    const group = groupsByPrompt.get(prompt)!;
+
+    if (question_type === "competency" && row.competency_code) {
+      const competencyName = competencyNameByCode.get(row.competency_code) || row.competency_code;
+      if (!group.competencyMap.has(competencyName)) {
+        group.competencyMap.set(competencyName, []);
+      }
+      group.competencyMap.get(competencyName)!.push({
+        value: row.answer_value,
+        text: row.answer_text,
+      });
+      continue;
+    }
+
+    const display = row.answer_value != null ? `${row.answer_value} / 5` : row.answer_text;
+    if (!display) continue;
+    group.answers.push(display);
   }
-  // Preguntas de escala primero, abiertas después (más fácil de leer de un
-  // vistazo), y dentro de cada grupo, en el orden de la plantilla.
-  return Array.from(groupsByPrompt.values()).sort((a, b) => {
-    if (a.questionType !== b.questionType) {
-      return a.questionType === "open" ? 1 : -1;
-    }
-    return a.position - b.position;
-  });
+
+  // Preguntas de escala/competencia primero, abiertas después (más fácil de
+  // leer de un vistazo), y dentro de cada grupo, en el orden de la plantilla.
+  return Array.from(groupsByPrompt.entries())
+    .map(([prompt, group]) => ({
+      prompt,
+      position: group.position,
+      questionType: group.questionType,
+      answers: group.answers,
+      competencyEntries: Array.from(group.competencyMap.entries()).map(([competencyName, entries]) => ({
+        competencyName,
+        entries,
+      })),
+    }))
+    .sort((a, b) => {
+      if (a.questionType !== b.questionType) {
+        return a.questionType === "open" ? 1 : -1;
+      }
+      return a.position - b.position;
+    });
 }
 
 function QuestionGroupList({ groups }: { groups: QuestionGroup[] }) {
@@ -62,13 +111,34 @@ function QuestionGroupList({ groups }: { groups: QuestionGroup[] }) {
       {groups.map((group) => (
         <div key={group.prompt}>
           <h3 className="text-sm font-medium mb-3">{group.prompt}</h3>
-          <div className="flex flex-col gap-2">
-            {group.answers.map((answer, index) => (
-              <div key={index} className="border rounded p-3 text-sm text-gray-700">
-                {answer}
-              </div>
-            ))}
-          </div>
+          {group.questionType === "competency" ? (
+            <div className="flex flex-col gap-4">
+              {group.competencyEntries.map(({ competencyName, entries }) => (
+                <div key={competencyName}>
+                  <p className="text-xs font-medium text-gray-500 mb-2">{competencyName}</p>
+                  <div className="flex flex-col gap-2">
+                    {entries.map((entry, index) => (
+                      <div key={index} className="border rounded p-3 text-sm text-gray-700">
+                        {entry.value != null && (
+                          <span className="font-medium">{entry.value} / 5</span>
+                        )}
+                        {entry.value != null && entry.text ? " — " : ""}
+                        {entry.text}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {group.answers.map((answer, index) => (
+                <div key={index} className="border rounded p-3 text-sm text-gray-700">
+                  {answer}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -231,8 +301,8 @@ export default async function FeedbackRequestPage({
         <h2 className="text-sm font-medium text-gray-500 mb-4">Respuestas de compañeros</h2>
         {!revealed ? (
           <p className="text-sm text-gray-600">
-            Esperando más respuestas ({progress?.response_count ?? 0} de{" "}
-            {progress?.threshold ?? 3}). Nadie sabe quién ha respondido ya.
+            Han respondido {progress?.response_count ?? 0} de {progress?.threshold ?? 3}{" "}
+            necesarias para poder ver algo. Nadie sabe quién ha respondido ya.
           </p>
         ) : (
           <QuestionGroupList groups={peerGroups} />

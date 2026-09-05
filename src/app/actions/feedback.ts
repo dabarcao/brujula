@@ -76,16 +76,43 @@ export async function updateFeedbackRequestEvaluators(formData: FormData) {
   redirect(`/dashboard/feedback/${requestId}?updated=1`);
 }
 
+type FeedbackAnswer = {
+  question_id: string;
+  answer_text?: string;
+  answer_value?: number | null;
+  competency_code?: string;
+};
+
 export async function submitFeedbackResponse(formData: FormData) {
   const token = String(formData.get("token") || "");
   const questionIds = formData.getAll("questionId").map(String);
   const questionTypes = formData.getAll("questionType").map(String);
 
-  const answers = questionIds.map((questionId, index) => {
+  const answers: FeedbackAnswer[] = [];
+
+  questionIds.forEach((questionId, index) => {
+    const type = questionTypes[index];
+
+    if (type === "competency") {
+      const codes = formData.getAll(`competency_${questionId}`).map(String);
+      codes.forEach((code) => {
+        const rawValue = String(formData.get(`competency_value_${questionId}_${code}`) || "");
+        answers.push({
+          question_id: questionId,
+          competency_code: code,
+          answer_value: rawValue ? Number(rawValue) : null,
+          answer_text: String(formData.get(`competency_text_${questionId}_${code}`) || ""),
+        });
+      });
+      return;
+    }
+
     const rawValue = String(formData.get(`answer_${questionId}`) || "");
-    return questionTypes[index] === "scale"
-      ? { question_id: questionId, answer_value: rawValue ? Number(rawValue) : null }
-      : { question_id: questionId, answer_text: rawValue };
+    answers.push(
+      type === "scale"
+        ? { question_id: questionId, answer_value: rawValue ? Number(rawValue) : null }
+        : { question_id: questionId, answer_text: rawValue }
+    );
   });
 
   const supabase = await createClient();
