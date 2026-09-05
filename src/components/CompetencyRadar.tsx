@@ -13,7 +13,7 @@ type Axis = {
   selfValue?: number | null;
 };
 
-const PRINCIPLE_COLORS: Record<string, string> = {
+export const PRINCIPLE_COLORS: Record<string, string> = {
   evolutionary_purpose: "#2563eb",
   self_organizing_team: "#059669",
   wholeness: "#ea580c",

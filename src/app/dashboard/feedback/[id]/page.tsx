@@ -8,7 +8,7 @@ import {
   updateFeedbackRequestEvaluators,
 } from "@/app/actions/feedback";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
-import CompetencyRadar from "@/components/CompetencyRadar";
+import CompetencyRadar, { PRINCIPLE_COLORS } from "@/components/CompetencyRadar";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -76,7 +76,8 @@ type CompetencySummaryRow = {
   competency_name: string | null;
   avg_value: number;
   response_count: number;
-  percentile: number | null;
+  percentile_empresa: number | null;
+  percentile_global: number | null;
 };
 
 function CompetencySummaryTable({ rows }: { rows: CompetencySummaryRow[] }) {
@@ -88,7 +89,8 @@ function CompetencySummaryTable({ rows }: { rows: CompetencySummaryRow[] }) {
           <tr className="bg-gray-50 text-left text-xs text-gray-500">
             <th className="px-4 py-2 font-medium">Competencia</th>
             <th className="px-4 py-2 font-medium">Nota media</th>
-            <th className="px-4 py-2 font-medium">Percentil</th>
+            <th className="px-4 py-2 font-medium">Percentil empresa</th>
+            <th className="px-4 py-2 font-medium">Percentil global</th>
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -97,16 +99,19 @@ function CompetencySummaryTable({ rows }: { rows: CompetencySummaryRow[] }) {
               <td className="px-4 py-2">{row.competency_name || row.competency_code}</td>
               <td className="px-4 py-2">{row.avg_value} / 5</td>
               <td className="px-4 py-2 text-gray-500">
-                {row.percentile != null ? `p${row.percentile}` : "—"}
+                {row.percentile_empresa != null ? `${row.percentile_empresa}%` : "—"}
+              </td>
+              <td className="px-4 py-2 text-gray-500">
+                {row.percentile_global != null ? `${row.percentile_global}%` : "—"}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="text-xs text-gray-400 mt-2">
-        El percentil todavía no es fiable — hay muy pocos datos en la plataforma
-        para compararse de verdad. Se muestra igualmente para tener el mecanismo
-        listo cuando haya más volumen.
+        El percentil global todavía no es fiable — hay muy pocos datos en la
+        plataforma para compararse de verdad. Se muestran igualmente para
+        tener el mecanismo listo cuando haya más volumen.
       </p>
     </div>
   );
@@ -144,8 +149,18 @@ function CompetencyComparisonRadar({ rows }: { rows: CompetencyComparisonRow[] }
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-900" /> Tú
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-600" /> Media de los
-          demás
+          <span className="flex h-2.5 w-6 rounded-full overflow-hidden">
+            <span
+              className="flex-1"
+              style={{ backgroundColor: PRINCIPLE_COLORS.evolutionary_purpose }}
+            />
+            <span
+              className="flex-1"
+              style={{ backgroundColor: PRINCIPLE_COLORS.self_organizing_team }}
+            />
+            <span className="flex-1" style={{ backgroundColor: PRINCIPLE_COLORS.wholeness }} />
+          </span>
+          Media de los demás (color según dimensión)
         </span>
       </div>
     </div>

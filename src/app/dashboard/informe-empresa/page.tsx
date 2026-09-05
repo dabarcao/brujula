@@ -13,7 +13,7 @@ type SummaryRow = {
   avg_value: number;
 };
 
-export default async function MiMapaDeCompetenciasPage() {
+export default async function InformeEmpresaPage() {
   const supabase = await createClient();
 
   const {
@@ -26,20 +26,22 @@ export default async function MiMapaDeCompetenciasPage() {
 
   const { data: member } = await supabase
     .from("members")
-    .select("id")
+    .select("id, is_supervisor, organizations(name)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  if (!member) {
+  if (!member || !member.is_supervisor) {
     redirect("/dashboard");
   }
+
+  const orgName = (member.organizations as unknown as { name: string } | null)?.name;
 
   const [{ data: frameworkData }, { data: summaryData }] = await Promise.all([
     supabase
       .from("competency_frameworks")
       .select("code, name, principle_id, competency_principles(code, name, position)")
       .order("name"),
-    supabase.rpc("get_my_competency_summary"),
+    supabase.rpc("get_organization_competency_summary"),
   ]);
 
   const frameworks = (frameworkData as unknown as FrameworkRow[] | null) || [];
@@ -54,7 +56,7 @@ export default async function MiMapaDeCompetenciasPage() {
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">Mi mapa de competencias</h1>
+        <h1 className="text-2xl font-semibold">Mapa de competencias de {orgName}</h1>
         <Link href="/dashboard" className="text-sm underline text-gray-600">
           Volver al panel
         </Link>
@@ -62,15 +64,14 @@ export default async function MiMapaDeCompetenciasPage() {
 
       {!hasAnyData ? (
         <p className="text-sm text-gray-600">
-          Todavía no hay suficiente feedback tuyo revelado como para mostrar tu
-          mapa. En cuanto se abra alguna de tus solicitudes o ciclos (al
-          menos 3 respuestas), aparecerá aquí.
+          Todavía no hay suficiente feedback revelado en la empresa como para
+          mostrar este mapa.
         </p>
       ) : (
         <>
           <p className="text-sm text-gray-600 mb-6">
-            Junta todo el feedback que has recibido (ágil y de ciclos 360) que
-            ya se ha revelado, sin contar tu autoevaluación.
+            Junta todo el feedback ya revelado de todos los empleados (ágil y
+            de ciclos 360), sin contar autoevaluaciones.
           </p>
 
           <div className="grid grid-cols-3 gap-3 mb-8">
