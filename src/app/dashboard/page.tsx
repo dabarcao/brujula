@@ -174,6 +174,9 @@ export default async function DashboardPage() {
         <Link href="/dashboard/feedback/nueva" className="text-sm underline text-gray-700">
           Pedir feedback
         </Link>
+        <Link href="/dashboard/mi-mapa" className="text-sm underline text-gray-700">
+          Mi mapa de competencias
+        </Link>
       </div>
 
       {openCycles && openCycles.length > 0 && (

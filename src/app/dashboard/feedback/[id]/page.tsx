@@ -8,6 +8,7 @@ import {
   updateFeedbackRequestEvaluators,
 } from "@/app/actions/feedback";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
+import CompetencyRadar from "@/components/CompetencyRadar";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -57,11 +58,11 @@ function QuestionGroupList({ groups }: { groups: QuestionGroup[] }) {
       {groups.map((group) => (
         <div key={group.prompt}>
           <h3 className="text-sm font-medium mb-3">{group.prompt}</h3>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {group.answers.map((answer, index) => (
-              <div key={index} className="border rounded p-3 text-sm text-gray-700">
+              <p key={index} className="text-sm text-gray-700">
                 {answer}
-              </div>
+              </p>
             ))}
           </div>
         </div>
@@ -107,6 +108,46 @@ function CompetencySummaryTable({ rows }: { rows: CompetencySummaryRow[] }) {
         para compararse de verdad. Se muestra igualmente para tener el mecanismo
         listo cuando haya más volumen.
       </p>
+    </div>
+  );
+}
+
+type CompetencyComparisonRow = {
+  competency_code: string;
+  competency_name: string;
+  principle_code: string | null;
+  principle_name: string | null;
+  self_value: number | null;
+  peer_avg_value: number | null;
+  peer_response_count: number;
+};
+
+// Comparativa autoevaluación vs. media de los demás — solo tiene sentido
+// en un ciclo 360 (es el único flujo con autoevaluación). El "por
+// competencias" libre (ad_hoc) sigue usando CompetencySummaryTable.
+function CompetencyComparisonRadar({ rows }: { rows: CompetencyComparisonRow[] }) {
+  if (rows.length === 0) return null;
+  const axes = rows.map((row) => ({
+    code: row.competency_code,
+    name: row.competency_name,
+    principleCode: row.principle_code || "",
+    avgValue: row.peer_avg_value,
+    selfValue: row.self_value,
+  }));
+  return (
+    <div className="mb-8">
+      <div className="flex justify-center">
+        <CompetencyRadar axes={axes} />
+      </div>
+      <div className="flex items-center justify-center gap-6 text-xs text-gray-500 mt-2">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-900" /> Tú
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-600" /> Media de los
+          demás
+        </span>
+      </div>
     </div>
   );
 }
@@ -192,10 +233,18 @@ export default async function FeedbackRequestPage({
   // global o por grupos, no para listarla tal cual en esta vista.
   const peerGroups = revealed ? await loadQuestionGroups(supabase, id, false) : [];
 
-  const { data: competencySummaryData } = revealed
+  const isCycle = request.request_type === "cycle";
+
+  const { data: competencySummaryData } = revealed && !isCycle
     ? await supabase.rpc("get_request_competency_summary", { p_request_id: id })
     : { data: null };
   const competencySummary = (competencySummaryData as CompetencySummaryRow[] | null) || [];
+
+  const { data: competencyComparisonData } = revealed && isCycle
+    ? await supabase.rpc("get_request_competency_comparison", { p_request_id: id })
+    : { data: null };
+  const competencyComparison =
+    (competencyComparisonData as CompetencyComparisonRow[] | null) || [];
 
   const isAdHocOpen = request.request_type === "ad_hoc" && request.status === "open";
   const canManage = isAdHocOpen && (progress?.response_count ?? 0) === 0;
@@ -320,7 +369,11 @@ export default async function FeedbackRequestPage({
                 {cycleClosesAt ? ` o que se cierre el ${cycleClosesAt}` : ""}.
               </p>
             )}
-            <CompetencySummaryTable rows={competencySummary} />
+            {isCycle ? (
+              <CompetencyComparisonRadar rows={competencyComparison} />
+            ) : (
+              <CompetencySummaryTable rows={competencySummary} />
+            )}
             <QuestionGroupList groups={peerGroups} />
           </>
         )}
