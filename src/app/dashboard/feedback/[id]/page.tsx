@@ -7,8 +7,10 @@ import {
   closeFeedbackRequest,
   updateFeedbackRequestEvaluators,
 } from "@/app/actions/feedback";
+import { updateCycleRequestEvaluators } from "@/app/actions/cycles";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
 import CompetencyRadar, { PRINCIPLE_COLORS } from "@/components/CompetencyRadar";
+import { EVALUATOR_CATEGORY_LABELS } from "@/lib/evaluatorCategories";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -263,25 +265,38 @@ export default async function FeedbackRequestPage({
 
   const isAdHocOpen = request.request_type === "ad_hoc" && request.status === "open";
   const canManage = isAdHocOpen && (progress?.response_count ?? 0) === 0;
+  const canManageCycle = isCycle && request.status === "open" && (progress?.response_count ?? 0) === 0;
 
   let colleagues: ColleagueRow[] | null = null;
   let currentInviteeIds: string[] = [];
-  if (canManage) {
+  let categoryDefaultsById: Record<string, string> = {};
+  if (canManage || canManageCycle) {
     const { data: colleaguesData } = await supabase
       .from("members")
       .select("id, email, full_name")
       .eq("status", "active")
+      .eq("is_supervisor", false)
       .neq("id", currentMember.id)
       .order("email");
     colleagues = colleaguesData;
 
+    // El flujo ágil nunca pone evaluator_category (siempre NULL) y el de
+    // ciclo lo pone en todas menos la fila 'self' — "neq" no vale porque
+    // en SQL NULL <> 'self' da NULL, no true, y se perderían las filas
+    // del flujo ágil.
     const { data: invitations } = await supabase
       .from("feedback_invitations")
-      .select("invitee_member_id")
-      .eq("feedback_request_id", id);
+      .select("invitee_member_id, evaluator_category")
+      .eq("feedback_request_id", id)
+      .or("evaluator_category.is.null,evaluator_category.neq.self");
     currentInviteeIds = (invitations || [])
       .map((i) => i.invitee_member_id)
       .filter((v): v is string => Boolean(v));
+    categoryDefaultsById = Object.fromEntries(
+      (invitations || [])
+        .filter((i) => i.invitee_member_id && i.evaluator_category)
+        .map((i) => [i.invitee_member_id as string, i.evaluator_category as string])
+    );
   }
 
   return (
@@ -354,6 +369,47 @@ export default async function FeedbackRequestPage({
               Marcar como completada
             </button>
           </form>
+        </section>
+      )}
+
+      {isCycle && (
+        <section className="mb-10 border rounded p-4">
+          <p className="text-sm font-medium mb-3">Gestionar evaluadores</p>
+
+          {canManageCycle ? (
+            <>
+              <p className="text-xs text-gray-500 mb-4">
+                Todavía nadie ha respondido, así que puedes cambiar a quién
+                elegiste como evaluador o su categoría. Tu autoevaluación no
+                se ve afectada.
+              </p>
+              <form
+                action={updateCycleRequestEvaluators}
+                className="flex flex-col gap-3"
+              >
+                <input type="hidden" name="requestId" value={id} />
+                <EvaluatorPicker
+                  colleagues={colleagues || []}
+                  checkboxName="evaluatorId"
+                  defaultCheckedIds={currentInviteeIds}
+                  categoryOptions={EVALUATOR_CATEGORY_LABELS}
+                  categoryDefaultValue="team"
+                  categoryDefaultsById={categoryDefaultsById}
+                />
+                <button
+                  type="submit"
+                  className="border rounded px-4 py-2 text-sm hover:bg-gray-50 self-start"
+                >
+                  Guardar cambios
+                </button>
+              </form>
+            </>
+          ) : (
+            <p className="text-xs text-gray-500">
+              Ya hay respuestas, así que no se puede cambiar quién evalúa ni
+              su categoría.
+            </p>
+          )}
         </section>
       )}
 

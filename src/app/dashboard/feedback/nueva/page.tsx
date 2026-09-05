@@ -80,6 +80,7 @@ export default async function NewFeedbackRequestPage({
     .from("members")
     .select("id, email, full_name")
     .eq("status", "active")
+    .eq("is_supervisor", false)
     .neq("id", currentMember.id)
     .order("email");
 

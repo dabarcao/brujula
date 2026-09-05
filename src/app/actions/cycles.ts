@@ -53,3 +53,24 @@ export async function organizeCycleEvaluators(formData: FormData) {
   revalidatePath("/dashboard");
   redirect("/dashboard?cycleOrganized=1");
 }
+
+export async function updateCycleRequestEvaluators(formData: FormData) {
+  const requestId = String(formData.get("requestId") || "");
+  const evaluatorIds = formData.getAll("evaluatorId").map(String);
+  const categories = evaluatorIds.map((id) => String(formData.get(`category_${id}`) || ""));
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("update_cycle_request_evaluators", {
+    p_request_id: requestId,
+    p_evaluator_member_ids: evaluatorIds,
+    p_evaluator_categories: categories,
+  });
+
+  if (error) {
+    redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/dashboard");
+  redirect(`/dashboard/feedback/${requestId}?updated=1`);
+}

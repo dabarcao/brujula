@@ -146,6 +146,12 @@ export default async function DashboardPage() {
     (myCycleRequests || []).map((r) => [r.cycle_id, r.id])
   );
 
+  // Un ciclo ya organizado (tiene su propia feedback_request) sale en
+  // "Mis feedbacks en curso" más abajo — aquí solo se listan los que
+  // todavía necesitan que organices tus evaluadores, para no duplicar la
+  // misma entrada en dos sitios.
+  const cyclesToOrganize = openCycles.filter((cycle) => !cycleRequestByCycleId.get(cycle.id));
+
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
@@ -160,53 +166,55 @@ export default async function DashboardPage() {
         {member.is_supervisor ? " (administrador)" : ""}.
       </p>
 
-      <div className="flex gap-4 mt-4">
+      <div className="flex flex-wrap gap-2.5 mt-5">
+        <Link
+          href="/dashboard/feedback/nueva"
+          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+        >
+          Pedir feedback
+        </Link>
+        <Link
+          href="/dashboard/mi-mapa"
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+        >
+          Mi mapa de competencias
+        </Link>
         {member.is_supervisor && (
           <>
-            <Link href="/dashboard/members" className="text-sm underline text-gray-700">
+            <Link
+              href="/dashboard/members"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+            >
               Gestionar empleados
             </Link>
-            <Link href="/dashboard/cycles/nueva" className="text-sm underline text-gray-700">
-              Crear ciclo 360
+            <Link
+              href="/dashboard/cycles"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+            >
+              Ciclos 360
             </Link>
-            <Link href="/dashboard/informe-empresa" className="text-sm underline text-gray-700">
+            <Link
+              href="/dashboard/informe-empresa"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+            >
               Mapa de competencias de la empresa
             </Link>
           </>
         )}
-        <Link href="/dashboard/feedback/nueva" className="text-sm underline text-gray-700">
-          Pedir feedback
-        </Link>
-        <Link href="/dashboard/mi-mapa" className="text-sm underline text-gray-700">
-          Mi mapa de competencias
-        </Link>
       </div>
 
-      {openCycles && openCycles.length > 0 && (
+      {cyclesToOrganize.length > 0 && (
         <section className="mt-8">
           <h2 className="text-sm font-medium text-gray-700 mb-3">Ciclos 360 abiertos</h2>
           <ul className="border rounded divide-y">
-            {openCycles.map((cycle) => {
-              const myRequestId = cycleRequestByCycleId.get(cycle.id);
-              return (
-                <li
-                  key={cycle.id}
-                  className="flex items-center justify-between px-4 py-3 text-sm"
-                >
-                  <span>{cycle.name}</span>
-                  <Link
-                    href={
-                      myRequestId
-                        ? `/dashboard/feedback/${myRequestId}`
-                        : `/dashboard/cycles/${cycle.id}`
-                    }
-                    className="underline text-gray-700"
-                  >
-                    {myRequestId ? "Ver progreso" : "Organizar evaluadores"}
-                  </Link>
-                </li>
-              );
-            })}
+            {cyclesToOrganize.map((cycle) => (
+              <li key={cycle.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <span>{cycle.name}</span>
+                <Link href={`/dashboard/cycles/${cycle.id}`} className="underline text-gray-700">
+                  Organizar evaluadores
+                </Link>
+              </li>
+            ))}
           </ul>
         </section>
       )}
@@ -254,7 +262,7 @@ export default async function DashboardPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-sm font-medium text-gray-700 mb-3">Mis solicitudes</h2>
+        <h2 className="text-sm font-medium text-gray-700 mb-3">Mis feedbacks en curso</h2>
         {!myRequests || myRequests.length === 0 ? (
           <p className="text-sm text-gray-500">Todavía no has pedido feedback.</p>
         ) : (

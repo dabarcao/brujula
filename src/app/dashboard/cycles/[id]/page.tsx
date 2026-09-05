@@ -3,18 +3,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { organizeCycleEvaluators } from "@/app/actions/cycles";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
+import { EVALUATOR_CATEGORY_LABELS } from "@/lib/evaluatorCategories";
 
 type ColleagueRow = {
   id: string;
   email: string;
   full_name: string | null;
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  manager: "Jefe / responsable directo",
-  team: "Compañero de equipo",
-  organization: "Compañero de la empresa",
-  other: "Otro",
 };
 
 export default async function CyclePage({
@@ -79,6 +73,7 @@ export default async function CyclePage({
     .from("members")
     .select("id, email, full_name")
     .eq("status", "active")
+    .eq("is_supervisor", false)
     .neq("id", currentMember.id)
     .order("email");
 
@@ -129,7 +124,7 @@ export default async function CyclePage({
             <EvaluatorPicker
               colleagues={(colleagues as ColleagueRow[] | null) || []}
               checkboxName="evaluatorId"
-              categoryOptions={CATEGORY_LABELS}
+              categoryOptions={EVALUATOR_CATEGORY_LABELS}
               categoryDefaultValue="team"
             />
 
