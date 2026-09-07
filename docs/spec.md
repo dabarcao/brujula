@@ -308,6 +308,7 @@ Ver también la sección 17 (backlog) para el listado consolidado de lo que falt
 - El benchmarking global de percentiles (sección 7/10) se calculará con datos de empleados de todas las empresas — ¿alguna empresa podrá excluirse (opt-out) de aportar sus datos a ese pool global, o es obligatorio por diseño para todas?
 - ¿Habrá un plan gratuito/trial para las primeras empresas pequeñas, o se cobra desde el primer cliente?
 - ¿El feedback ágil/individual debe contribuir algo (aunque sea con menor peso) a las métricas agregadas de empresa, o queda completamente fuera de esas métricas como herramienta puramente personal?
+- **¿Merece la pena centralizar las reglas de negocio (umbrales de anonimato, quién puede editar qué y cuándo, cuándo se revela un informe, fechas de cierre...) en un "motor de reglas" único, aunque implique reingeniería?** Idea, no tarea para ahora. Motivo: hoy la misma regla se calcula dos veces en sitios distintos — la función SQL que de verdad la impone, y el componente de Next.js que recalcula lo mismo por separado solo para decidir qué mostrar (ejemplo concreto: `canManageCycle`/`canFullyEditCycle` en `feedback/[id]/gestionar/page.tsx` recalculan en TypeScript la misma condición que ya decide `update_cycle_request_evaluators` en SQL). Con cada regla nueva (fecha de cierre, 80%, percentil...) este duplicado crece; en algún momento puede compensar centralizarlo en un solo sitio que ambas capas consulten, en vez de mantenerlo sincronizado a mano.
 
 ## 16. Extensibilidad a otros verticales (parcialmente materializada)
 
