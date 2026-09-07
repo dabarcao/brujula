@@ -103,6 +103,41 @@ export default function CompetencyComparisonChart({
 
   const seriesByCategory = new Map(categorySeries.map((s) => [s.category, s.valuesByCode]));
 
+  // Escala de referencia (1-5) dibujada en el hueco entre el último eje y
+  // el primero, para no solaparse con ningún radio ni etiqueta de
+  // competencia — así se puede leer a ojo qué anillo corresponde a qué
+  // nota, sin tener que adivinarlo.
+  const scaleAngle = -Math.PI / 2 - halfWidth;
+  const scaleTicks = [1, 2, 3, 4, 5].map((level) => {
+    const r = maxRadius * (level / 5);
+    return {
+      level,
+      x: center + Math.cos(scaleAngle) * r,
+      y: center + Math.sin(scaleAngle) * r,
+    };
+  });
+
+  // Tabla de valores exactos debajo del gráfico — el radio de cada punto
+  // solo permite leer la nota a ojo, esto la deja sin ambigüedad. A
+  // diferencia de las líneas del gráfico (que solo se dibujan si el chip
+  // de esa categoría está activo), la tabla muestra siempre TODAS las
+  // categorías que el backend ya considera reveladas — categorySeries
+  // solo trae grupos con su mínimo cumplido (3, salvo "jefe" que basta
+  // con 1, migración 0052), así que aquí no hace falta filtrar más.
+  const tableColumns: { key: string; label: string; getValue: (axis: (typeof axes)[number]) => number | null }[] = [
+    { key: "peer", label: "Media", getValue: (axis) => axis.peerAvgValue },
+  ];
+  if (hasAnySelf) {
+    tableColumns.push({ key: "self", label: "Tú", getValue: (axis) => axis.selfValue });
+  }
+  for (const series of categorySeries) {
+    tableColumns.push({
+      key: series.category,
+      label: EVALUATOR_CATEGORY_LABELS[series.category] || series.category,
+      getValue: (axis) => seriesByCategory.get(series.category)?.[axis.code] ?? null,
+    });
+  }
+
   const toggleCategory = (category: string) => {
     setActiveCategories((prev) => {
       const next = new Set(prev);
@@ -163,6 +198,19 @@ export default function CompetencyComparisonChart({
               <circle key={`selfdot-${p.code}`} cx={p.x} cy={p.y} r={3.5} fill="#111827" />
             ) : null
           )}
+        {scaleTicks.map((tick) => (
+          <text
+            key={`scale-${tick.level}`}
+            x={tick.x}
+            y={tick.y}
+            fontSize={8.5}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#9ca3af"
+          >
+            {tick.level}
+          </text>
+        ))}
         {points.map((p) => (
           <text
             key={`label-${p.code}`}
@@ -227,6 +275,36 @@ export default function CompetencyComparisonChart({
           </div>
         </div>
       )}
+
+      <div className="mt-4 w-full overflow-x-auto">
+        <table className="w-full text-xs border rounded overflow-hidden">
+          <thead>
+            <tr className="bg-gray-50 text-left text-gray-500">
+              <th className="px-3 py-2 font-medium">Competencia</th>
+              {tableColumns.map((col) => (
+                <th key={col.key} className="px-3 py-2 font-medium text-right">
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {axes.map((axis) => (
+              <tr key={axis.code}>
+                <td className="px-3 py-2">{axis.name}</td>
+                {tableColumns.map((col) => {
+                  const value = col.getValue(axis);
+                  return (
+                    <td key={col.key} className="px-3 py-2 text-right text-gray-700">
+                      {value != null ? value.toFixed(1) : "—"}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
