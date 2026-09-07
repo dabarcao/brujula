@@ -59,7 +59,7 @@ function QuestionGroupList({ groups }: { groups: QuestionGroup[] }) {
     <div className="flex flex-col gap-8">
       {groups.map((group) => (
         <div key={group.prompt}>
-          <h3 className="text-sm font-medium mb-3">{group.prompt}</h3>
+          <h3 className="text-sm font-semibold mb-3">{group.prompt}</h3>
           <div className="flex flex-col gap-3">
             {group.answers.map((answer, index) => (
               <p key={index} className="text-sm text-gray-700">
