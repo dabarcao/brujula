@@ -57,12 +57,14 @@ export async function organizeCycleEvaluators(formData: FormData) {
 export async function createIndividualCycleRequest(formData: FormData) {
   const evaluatorEmails = formData.getAll("evaluatorEmails").map(String);
   const categories = evaluatorEmails.map((email) => String(formData.get(`category_${email}`) || ""));
+  const closesAt = String(formData.get("closesAt") || "");
 
   const supabase = await createClient();
 
   const { error } = await supabase.rpc("create_individual_cycle_request", {
     p_evaluator_emails: evaluatorEmails,
     p_evaluator_categories: categories,
+    p_closes_at: closesAt,
   });
 
   if (error) {
@@ -87,9 +89,34 @@ export async function updateCycleRequestEvaluators(formData: FormData) {
   });
 
   if (error) {
-    redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
+    redirect(
+      `/dashboard/feedback/${requestId}/gestionar?error=` + encodeURIComponent(error.message)
+    );
   }
 
   revalidatePath("/dashboard");
-  redirect(`/dashboard/feedback/${requestId}?updated=1`);
+  redirect(`/dashboard/feedback/${requestId}/gestionar?updated=1`);
+}
+
+export async function updateIndividualCycleRequestEvaluators(formData: FormData) {
+  const requestId = String(formData.get("requestId") || "");
+  const evaluatorEmails = formData.getAll("evaluatorEmails").map(String);
+  const categories = evaluatorEmails.map((email) => String(formData.get(`category_${email}`) || ""));
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("update_individual_cycle_request_evaluators", {
+    p_request_id: requestId,
+    p_evaluator_emails: evaluatorEmails,
+    p_evaluator_categories: categories,
+  });
+
+  if (error) {
+    redirect(
+      `/dashboard/feedback/${requestId}/gestionar?error=` + encodeURIComponent(error.message)
+    );
+  }
+
+  revalidatePath("/dashboard");
+  redirect(`/dashboard/feedback/${requestId}/gestionar?updated=1`);
 }

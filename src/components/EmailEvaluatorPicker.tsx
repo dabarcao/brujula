@@ -9,6 +9,9 @@ export default function EmailEvaluatorPicker({
   minEmails,
   categoryOptions,
   categoryDefaultValue,
+  categoryDefaultsByEmail,
+  defaultEmails = [],
+  canModifyExisting = true,
   submitLabel = "Enviar solicitud",
 }: {
   fieldName: string;
@@ -17,9 +20,19 @@ export default function EmailEvaluatorPicker({
   // también un <select> de categoría (jefe/equipo/empresa/otro).
   categoryOptions?: Record<string, string>;
   categoryDefaultValue?: string;
+  // Categoría ya guardada por email (al editar ya existentes).
+  categoryDefaultsByEmail?: Record<string, string>;
+  // Emails ya invitados al cargar (editar una solicitud existente).
+  defaultEmails?: string[];
+  // false cuando ya hay respuestas: los que ya estaban invitados no se
+  // pueden quitar ni cambiar de categoría, solo se puede seguir
+  // añadiendo — los recién añadidos en esta misma sesión sí se pueden
+  // quitar antes de guardar (todavía no se han enviado).
+  canModifyExisting?: boolean;
   submitLabel?: string;
 }) {
-  const [emails, setEmails] = useState<string[]>([]);
+  const [emails, setEmails] = useState<string[]>(defaultEmails);
+  const [existingEmails] = useState<Set<string>>(new Set(defaultEmails));
   const [draft, setDraft] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -56,38 +69,59 @@ export default function EmailEvaluatorPicker({
         ) : (
           <table className="w-full text-sm border rounded overflow-hidden">
             <tbody className="divide-y">
-              {emails.map((email) => (
-                <tr key={email}>
-                  <td className="px-4 py-2">
-                    <input type="hidden" name={fieldName} value={email} />
-                    {email}
-                  </td>
-                  {categoryOptions && (
-                    <td className="px-4 py-2 w-48">
-                      <select
-                        name={`category_${email}`}
-                        defaultValue={categoryDefaultValue}
-                        className="border rounded px-2 py-1 text-xs w-full"
-                      >
-                        {Object.entries(categoryOptions).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
+              {emails.map((email) => {
+                const locked = !canModifyExisting && existingEmails.has(email);
+                const savedCategory = categoryDefaultsByEmail?.[email] ?? categoryDefaultValue;
+                return (
+                  <tr key={email}>
+                    <td className="px-4 py-2">
+                      <input type="hidden" name={fieldName} value={email} />
+                      {email}
                     </td>
-                  )}
-                  <td className="px-4 py-2 text-right w-20">
-                    <button
-                      type="button"
-                      onClick={() => removeEmail(email)}
-                      className="text-xs underline text-red-700"
-                    >
-                      Quitar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    {categoryOptions && (
+                      <td className="px-4 py-2 w-48">
+                        {locked ? (
+                          <>
+                            <span className="text-gray-500 text-xs">
+                              {categoryOptions[savedCategory ?? ""] ?? savedCategory}
+                            </span>
+                            <input
+                              type="hidden"
+                              name={`category_${email}`}
+                              value={savedCategory ?? ""}
+                            />
+                          </>
+                        ) : (
+                          <select
+                            name={`category_${email}`}
+                            defaultValue={savedCategory}
+                            className="border rounded px-2 py-1 text-xs w-full"
+                          >
+                            {Object.entries(categoryOptions).map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                    )}
+                    <td className="px-4 py-2 text-right w-20">
+                      {locked ? (
+                        <span className="text-xs text-gray-300">Ya invitado</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => removeEmail(email)}
+                          className="text-xs underline text-red-700"
+                        >
+                          Quitar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

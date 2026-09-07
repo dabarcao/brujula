@@ -317,19 +317,36 @@ export default async function DashboardPage() {
           <p className="text-sm text-gray-500">Todavía no has pedido feedback.</p>
         ) : (
           <ul className="border rounded divide-y">
-            {myRequests.map((request) => (
-              <li key={request.id} className="px-4 py-3 text-sm">
-                <Link href={`/dashboard/feedback/${request.id}`} className="underline">
-                  Solicitud del {new Date(request.created_at).toLocaleDateString("es-ES")}
-                  {request.request_type === "cycle"
-                    ? " (ciclo 360)"
-                    : ` (${SUBTYPE_LABELS[request.subtype ?? "general"]})`}
-                  {request.status === "closed" && request.request_type === "ad_hoc"
-                    ? " — cerrada"
-                    : ""}
-                </Link>
-              </li>
-            ))}
+            {myRequests.map((request) => {
+              const isCycle = request.request_type === "cycle";
+              return (
+                <li
+                  key={request.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
+                >
+                  <span>
+                    Solicitud del {new Date(request.created_at).toLocaleDateString("es-ES")}
+                    {isCycle
+                      ? " (ciclo 360)"
+                      : ` (${SUBTYPE_LABELS[request.subtype ?? "general"]})`}
+                    {request.status === "closed" && !isCycle ? " — cerrada" : ""}
+                  </span>
+                  <span className="flex items-center gap-3 shrink-0">
+                    {isCycle && (
+                      <Link
+                        href={`/dashboard/feedback/${request.id}/gestionar`}
+                        className="underline text-gray-600"
+                      >
+                        Gestionar evaluadores
+                      </Link>
+                    )}
+                    <Link href={`/dashboard/feedback/${request.id}`} className="underline">
+                      {isCycle ? "Ver informe" : "Ver"}
+                    </Link>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

@@ -18,6 +18,7 @@ export default function EvaluatorPicker({
   minSelected = 1,
   submitLabel = "Guardar cambios",
   primary = false,
+  canModifyExisting = true,
 }: {
   colleagues: ColleagueRow[];
   checkboxName: string;
@@ -40,9 +41,15 @@ export default function EvaluatorPicker({
   minSelected?: number;
   submitLabel?: string;
   primary?: boolean;
+  // false cuando ya hay respuestas: los que ya estaban invitados no se
+  // pueden quitar ni cambiar de categoría, solo se puede seguir
+  // añadiendo — los recién añadidos en esta misma sesión sí se pueden
+  // quitar antes de guardar (todavía no se han enviado).
+  canModifyExisting?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>(defaultCheckedIds);
+  const [existingIds] = useState<Set<string>>(new Set(defaultCheckedIds));
 
   const selectedSet = new Set(selectedIds);
   const byId = new Map(colleagues.map((c) => [c.id, c]));
@@ -72,41 +79,62 @@ export default function EvaluatorPicker({
         ) : (
           <table className="w-full text-sm border rounded overflow-hidden">
             <tbody className="divide-y">
-              {selected.map((colleague) => (
-                <tr key={colleague.id}>
-                  <td className="px-4 py-2">
-                    <input type="hidden" name={checkboxName} value={colleague.id} />
-                    <span className="font-medium">{colleague.full_name || colleague.email}</span>
-                    {colleague.full_name && (
-                      <span className="text-gray-500"> · {colleague.email}</span>
-                    )}
-                  </td>
-                  {categoryOptions && (
-                    <td className="px-4 py-2 w-48">
-                      <select
-                        name={`category_${colleague.id}`}
-                        defaultValue={categoryDefaultsById?.[colleague.id] ?? categoryDefaultValue}
-                        className="border rounded px-2 py-1 text-xs w-full"
-                      >
-                        {Object.entries(categoryOptions).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
+              {selected.map((colleague) => {
+                const locked = !canModifyExisting && existingIds.has(colleague.id);
+                const savedCategory = categoryDefaultsById?.[colleague.id] ?? categoryDefaultValue;
+                return (
+                  <tr key={colleague.id}>
+                    <td className="px-4 py-2">
+                      <input type="hidden" name={checkboxName} value={colleague.id} />
+                      <span className="font-medium">{colleague.full_name || colleague.email}</span>
+                      {colleague.full_name && (
+                        <span className="text-gray-500"> · {colleague.email}</span>
+                      )}
                     </td>
-                  )}
-                  <td className="px-4 py-2 text-right w-20">
-                    <button
-                      type="button"
-                      onClick={() => removeId(colleague.id)}
-                      className="text-xs underline text-red-700"
-                    >
-                      Quitar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    {categoryOptions && (
+                      <td className="px-4 py-2 w-48">
+                        {locked ? (
+                          <>
+                            <span className="text-gray-500 text-xs">
+                              {categoryOptions[savedCategory ?? ""] ?? savedCategory}
+                            </span>
+                            <input
+                              type="hidden"
+                              name={`category_${colleague.id}`}
+                              value={savedCategory ?? ""}
+                            />
+                          </>
+                        ) : (
+                          <select
+                            name={`category_${colleague.id}`}
+                            defaultValue={savedCategory}
+                            className="border rounded px-2 py-1 text-xs w-full"
+                          >
+                            {Object.entries(categoryOptions).map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                    )}
+                    <td className="px-4 py-2 text-right w-20">
+                      {locked ? (
+                        <span className="text-xs text-gray-300">Ya invitado</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => removeId(colleague.id)}
+                          className="text-xs underline text-red-700"
+                        >
+                          Quitar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

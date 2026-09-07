@@ -7,10 +7,8 @@ import {
   closeFeedbackRequest,
   updateFeedbackRequestEvaluators,
 } from "@/app/actions/feedback";
-import { updateCycleRequestEvaluators } from "@/app/actions/cycles";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
 import CompetencyComparisonChart from "@/components/CompetencyComparisonChart";
-import { EVALUATOR_CATEGORY_LABELS } from "@/lib/evaluatorCategories";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -208,12 +206,9 @@ export default async function FeedbackRequestPage({
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  const isIndividualAccount =
-    (currentMember?.organizations as unknown as { kind: string } | null)?.kind === "individual";
-
   const { data: request } = await supabase
     .from("feedback_requests")
-    .select("id, created_at, requester_member_id, request_type, status, cycle_id")
+    .select("id, created_at, requester_member_id, request_type, status, closes_at")
     .eq("id", id)
     .maybeSingle();
 
@@ -246,15 +241,7 @@ export default async function FeedbackRequestPage({
     .select("id", { count: "exact", head: true })
     .eq("feedback_request_id", id);
 
-  let cycleClosesAt: string | null = null;
-  if (request.request_type === "cycle" && request.cycle_id) {
-    const { data: cycle } = await supabase
-      .from("feedback_cycles")
-      .select("closes_at")
-      .eq("id", request.cycle_id)
-      .maybeSingle();
-    cycleClosesAt = cycle?.closes_at ?? null;
-  }
+  const cycleClosesAt: string | null = request.closes_at ?? null;
 
   const today = new Date().toISOString().slice(0, 10);
   const isFinal =
@@ -288,16 +275,16 @@ export default async function FeedbackRequestPage({
 
   const isAdHocOpen = request.request_type === "ad_hoc" && request.status === "open";
   const canManage = isAdHocOpen && totalResponseCount === 0;
-  // Editar por email (cuentas individuales) todavía no está construido —
-  // se oculta la sección en vez de mostrar un formulario roto.
-  const canManageCycle =
-    isCycle && !isIndividualAccount && request.status === "open" && totalResponseCount === 0;
+
+  // Solo para decidir si se muestra el enlace a "Gestionar evaluadores" —
+  // esa página (feedback/[id]/gestionar) hace su propia comprobación
+  // completa de si todavía se puede modificar algo.
+  const canLinkToManageCycle = isCycle && request.status === "open" && !isFinal;
 
   let colleagues: ColleagueRow[] | null = null;
   let currentInviteeIds: string[] = [];
-  let categoryDefaultsById: Record<string, string> = {};
   let minInvitees = 5;
-  if (canManage || canManageCycle) {
+  if (canManage) {
     const { data: settings } = await supabase
       .from("platform_settings")
       .select("min_invitees_per_request")
@@ -314,23 +301,13 @@ export default async function FeedbackRequestPage({
       .order("email");
     colleagues = colleaguesData;
 
-    // El flujo ágil nunca pone evaluator_category (siempre NULL) y el de
-    // ciclo lo pone en todas menos la fila 'self' — "neq" no vale porque
-    // en SQL NULL <> 'self' da NULL, no true, y se perderían las filas
-    // del flujo ágil.
     const { data: invitations } = await supabase
       .from("feedback_invitations")
-      .select("invitee_member_id, evaluator_category")
-      .eq("feedback_request_id", id)
-      .or("evaluator_category.is.null,evaluator_category.neq.self");
+      .select("invitee_member_id")
+      .eq("feedback_request_id", id);
     currentInviteeIds = (invitations || [])
       .map((i) => i.invitee_member_id)
       .filter((v): v is string => Boolean(v));
-    categoryDefaultsById = Object.fromEntries(
-      (invitations || [])
-        .filter((i) => i.invitee_member_id && i.evaluator_category)
-        .map((i) => [i.invitee_member_id as string, i.evaluator_category as string])
-    );
   }
 
   return (
@@ -401,45 +378,17 @@ export default async function FeedbackRequestPage({
         </section>
       )}
 
-      {isCycle && !isIndividualAccount && (
-        <section className="mb-10 border rounded p-4">
-          <p className="text-sm font-medium mb-3">Gestionar evaluadores</p>
-
-          {canManageCycle ? (
-            <>
-              <p className="text-xs text-gray-500 mb-4">
-                Todavía nadie ha respondido, así que puedes cambiar a quién
-                elegiste como evaluador o su categoría. Tu autoevaluación no
-                se ve afectada.
-              </p>
-              <form
-                action={updateCycleRequestEvaluators}
-                className="flex flex-col gap-3"
-              >
-                <input type="hidden" name="requestId" value={id} />
-                <EvaluatorPicker
-                  colleagues={colleagues || []}
-                  checkboxName="evaluatorId"
-                  defaultCheckedIds={currentInviteeIds}
-                  categoryOptions={EVALUATOR_CATEGORY_LABELS}
-                  categoryDefaultValue="team"
-                  categoryDefaultsById={categoryDefaultsById}
-                  minSelected={minInvitees}
-                />
-              </form>
-            </>
-          ) : (
-            <p className="text-xs text-gray-500">
-              Ya hay respuestas, así que no se puede cambiar quién evalúa ni
-              su categoría.
-            </p>
-          )}
-        </section>
-      )}
-
       <section>
         <div className="flex items-center gap-2 mb-4">
           <h2 className="text-sm font-medium text-gray-500">Respuestas de compañeros</h2>
+          {isCycle && canLinkToManageCycle && (
+            <Link
+              href={`/dashboard/feedback/${id}/gestionar`}
+              className="text-xs underline text-gray-600"
+            >
+              Gestionar evaluadores
+            </Link>
+          )}
           {revealed && (
             <span
               className={
@@ -462,6 +411,16 @@ export default async function FeedbackRequestPage({
                 cómo te ven los demás.
               </>
             )}
+            {isCycle &&
+              progress?.self_responded &&
+              (progress?.response_count ?? 0) >= (progress?.threshold ?? 3) && (
+                <>
+                  {" "}
+                  Ya se ha superado el mínimo, pero en un 360 no se muestra nada
+                  hasta tener al menos el 80% de las respuestas — para no ver el
+                  informe cambiando todo el rato con muy pocos datos.
+                </>
+              )}
           </p>
         ) : (
           <>

@@ -73,6 +73,10 @@ export default async function NewIndividual360Page({
 
   const minInvitees = settings?.min_invitees_per_request ?? 5;
 
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const minClosesAt = tomorrow.toISOString().slice(0, 10);
+
   const introText = await getPlatformText(
     supabase,
     "individual_360_intro",
@@ -95,6 +99,18 @@ export default async function NewIndividual360Page({
       )}
 
       <form action={createIndividualCycleRequest} className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1 text-sm max-w-xs">
+          Fecha límite para responder
+          <input
+            name="closesAt"
+            type="date"
+            required
+            min={minClosesAt}
+            defaultValue={minClosesAt}
+            className="border rounded px-3 py-2"
+          />
+        </label>
+
         <EmailEvaluatorPicker
           fieldName="evaluatorEmails"
           minEmails={minInvitees}
