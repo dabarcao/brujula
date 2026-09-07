@@ -13,9 +13,10 @@
 // Uso:
 //   node scripts/seed-david-360.mjs
 //
-// Es re-ejecutable: si las cuentas ya existen, inicia sesión en vez de
-// registrarlas de nuevo (pero create_individual_cycle_request fallará si
-// David ya tiene un 360 abierto — normal, "un 360 abierto a la vez").
+// Re-ejecutable de principio a fin: si las cuentas ya existen, inicia
+// sesión en vez de registrarlas de nuevo, y al terminar cierra el 360
+// (close_cycle_request, migración 0051) para que la próxima ejecución
+// pueda crear uno nuevo sin chocar con "un 360 abierto a la vez".
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -212,6 +213,11 @@ async function main() {
     p_request_id: requestId,
   });
   console.log(progress);
+
+  console.log("6. Cerrando el 360 para poder volver a lanzar el script...");
+  await rpc("close_cycle_request", davidToken, { p_request_id: requestId });
+  console.log("  cerrado");
+
   console.log(`\nListo: /dashboard/feedback/${requestId} (login david@kairos.es / kairos123)`);
 }
 
