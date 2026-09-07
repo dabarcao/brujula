@@ -9,7 +9,7 @@ import {
 } from "@/app/actions/feedback";
 import { updateCycleRequestEvaluators } from "@/app/actions/cycles";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
-import CompetencyRadar, { PRINCIPLE_COLORS } from "@/components/CompetencyRadar";
+import CompetencyComparisonChart from "@/components/CompetencyComparisonChart";
 import { EVALUATOR_CATEGORY_LABELS } from "@/lib/evaluatorCategories";
 
 type FlatAnswerRow = {
@@ -129,42 +129,50 @@ type CompetencyComparisonRow = {
   peer_response_count: number;
 };
 
+type CompetencyByCategoryRow = {
+  competency_code: string;
+  evaluator_category: string;
+  avg_value: number;
+  response_count: number;
+};
+
 // Comparativa autoevaluación vs. media de los demás — solo tiene sentido
 // en un ciclo 360 (es el único flujo con autoevaluación). El "por
-// competencias" libre (ad_hoc) sigue usando CompetencySummaryTable.
-function CompetencyComparisonRadar({ rows }: { rows: CompetencyComparisonRow[] }) {
+// competencias" libre (ad_hoc) sigue usando CompetencySummaryTable. Cada
+// grupo de evaluador (jefe/equipo/empresa/otro) solo aparece aquí si ya
+// tiene sus 3 respuestas mínimas — get_request_competency_by_category ya
+// filtra eso, aquí no hay que volver a comprobarlo.
+function CompetencyComparison({
+  rows,
+  byCategoryRows,
+}: {
+  rows: CompetencyComparisonRow[];
+  byCategoryRows: CompetencyByCategoryRow[];
+}) {
   if (rows.length === 0) return null;
   const axes = rows.map((row) => ({
     code: row.competency_code,
     name: row.competency_name,
     principleCode: row.principle_code || "",
-    avgValue: row.peer_avg_value,
+    peerAvgValue: row.peer_avg_value,
     selfValue: row.self_value,
   }));
+
+  const byCategory = new Map<string, Record<string, number>>();
+  for (const row of byCategoryRows) {
+    if (!byCategory.has(row.evaluator_category)) {
+      byCategory.set(row.evaluator_category, {});
+    }
+    byCategory.get(row.evaluator_category)![row.competency_code] = row.avg_value;
+  }
+  const categorySeries = Array.from(byCategory.entries()).map(([category, valuesByCode]) => ({
+    category,
+    valuesByCode,
+  }));
+
   return (
     <div className="mb-8">
-      <div className="flex justify-center">
-        <CompetencyRadar axes={axes} />
-      </div>
-      <div className="flex items-center justify-center gap-6 text-xs text-gray-500 mt-2">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-900" /> Tú
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="flex h-2.5 w-6 rounded-full overflow-hidden">
-            <span
-              className="flex-1"
-              style={{ backgroundColor: PRINCIPLE_COLORS.evolutionary_purpose }}
-            />
-            <span
-              className="flex-1"
-              style={{ backgroundColor: PRINCIPLE_COLORS.self_organizing_team }}
-            />
-            <span className="flex-1" style={{ backgroundColor: PRINCIPLE_COLORS.wholeness }} />
-          </span>
-          Media de los demás (color según dimensión)
-        </span>
-      </div>
+      <CompetencyComparisonChart axes={axes} categorySeries={categorySeries} />
     </div>
   );
 }
@@ -196,9 +204,12 @@ export default async function FeedbackRequestPage({
 
   const { data: currentMember } = await supabase
     .from("members")
-    .select("id, organization_id")
+    .select("id, organization_id, organizations(kind)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
+
+  const isIndividualAccount =
+    (currentMember?.organizations as unknown as { kind: string } | null)?.kind === "individual";
 
   const { data: request } = await supabase
     .from("feedback_requests")
@@ -215,10 +226,16 @@ export default async function FeedbackRequestPage({
     .maybeSingle();
 
   const progress = progressData as
-    | { response_count: number; threshold: number; revealed: boolean }
+    | { response_count: number; threshold: number; revealed: boolean; self_responded: boolean }
     | null;
 
   const revealed = progress?.revealed ?? false;
+
+  // progress.response_count ya es solo de compañeros (nunca cuenta la
+  // propia autoevaluación, sección 6) — para comprobar "¿ya respondió
+  // todo el mundo, incluido yo?" hace falta sumarle la autoevaluación
+  // aparte.
+  const totalResponseCount = (progress?.response_count ?? 0) + (progress?.self_responded ? 1 : 0);
 
   // "Definitivo" cuando ya no puede cambiar más: la solicitud se cerró a
   // mano, respondieron todos los invitados, o (en un ciclo 360) ya pasó la
@@ -242,7 +259,7 @@ export default async function FeedbackRequestPage({
   const today = new Date().toISOString().slice(0, 10);
   const isFinal =
     request.status === "closed" ||
-    (totalInvitees != null && (progress?.response_count ?? 0) >= totalInvitees) ||
+    (totalInvitees != null && totalResponseCount >= totalInvitees) ||
     (cycleClosesAt != null && cycleClosesAt < today);
 
   // La autoevaluación no se muestra aquí (texto/escala en crudo): queda
@@ -263,14 +280,31 @@ export default async function FeedbackRequestPage({
   const competencyComparison =
     (competencyComparisonData as CompetencyComparisonRow[] | null) || [];
 
+  const { data: competencyByCategoryData } = revealed && isCycle
+    ? await supabase.rpc("get_request_competency_by_category", { p_request_id: id })
+    : { data: null };
+  const competencyByCategory =
+    (competencyByCategoryData as CompetencyByCategoryRow[] | null) || [];
+
   const isAdHocOpen = request.request_type === "ad_hoc" && request.status === "open";
-  const canManage = isAdHocOpen && (progress?.response_count ?? 0) === 0;
-  const canManageCycle = isCycle && request.status === "open" && (progress?.response_count ?? 0) === 0;
+  const canManage = isAdHocOpen && totalResponseCount === 0;
+  // Editar por email (cuentas individuales) todavía no está construido —
+  // se oculta la sección en vez de mostrar un formulario roto.
+  const canManageCycle =
+    isCycle && !isIndividualAccount && request.status === "open" && totalResponseCount === 0;
 
   let colleagues: ColleagueRow[] | null = null;
   let currentInviteeIds: string[] = [];
   let categoryDefaultsById: Record<string, string> = {};
+  let minInvitees = 5;
   if (canManage || canManageCycle) {
+    const { data: settings } = await supabase
+      .from("platform_settings")
+      .select("min_invitees_per_request")
+      .eq("organization_id", currentMember.organization_id)
+      .maybeSingle();
+    minInvitees = settings?.min_invitees_per_request ?? 5;
+
     const { data: colleaguesData } = await supabase
       .from("members")
       .select("id, email, full_name")
@@ -339,13 +373,8 @@ export default async function FeedbackRequestPage({
                   colleagues={colleagues || []}
                   checkboxName="inviteeIds"
                   defaultCheckedIds={currentInviteeIds}
+                  minSelected={minInvitees}
                 />
-                <button
-                  type="submit"
-                  className="border rounded px-4 py-2 text-sm hover:bg-gray-50 self-start"
-                >
-                  Guardar cambios
-                </button>
               </form>
               <form action={cancelFeedbackRequest} className="inline">
                 <input type="hidden" name="requestId" value={id} />
@@ -372,7 +401,7 @@ export default async function FeedbackRequestPage({
         </section>
       )}
 
-      {isCycle && (
+      {isCycle && !isIndividualAccount && (
         <section className="mb-10 border rounded p-4">
           <p className="text-sm font-medium mb-3">Gestionar evaluadores</p>
 
@@ -395,13 +424,8 @@ export default async function FeedbackRequestPage({
                   categoryOptions={EVALUATOR_CATEGORY_LABELS}
                   categoryDefaultValue="team"
                   categoryDefaultsById={categoryDefaultsById}
+                  minSelected={minInvitees}
                 />
-                <button
-                  type="submit"
-                  className="border rounded px-4 py-2 text-sm hover:bg-gray-50 self-start"
-                >
-                  Guardar cambios
-                </button>
               </form>
             </>
           ) : (
@@ -431,6 +455,13 @@ export default async function FeedbackRequestPage({
           <p className="text-sm text-gray-600">
             Han respondido {progress?.response_count ?? 0} de {progress?.threshold ?? 3}{" "}
             necesarias para poder ver algo. Nadie sabe quién ha respondido ya.
+            {isCycle && !progress?.self_responded && (
+              <>
+                {" "}
+                Además, hasta que no hagas tu propia autoevaluación tampoco podrás ver
+                cómo te ven los demás.
+              </>
+            )}
           </p>
         ) : (
           <>
@@ -441,7 +472,7 @@ export default async function FeedbackRequestPage({
               </p>
             )}
             {isCycle ? (
-              <CompetencyComparisonRadar rows={competencyComparison} />
+              <CompetencyComparison rows={competencyComparison} byCategoryRows={competencyByCategory} />
             ) : (
               <CompetencySummaryTable rows={competencySummary} />
             )}

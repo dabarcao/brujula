@@ -22,6 +22,16 @@ type CompetencyOption = {
   name: string;
 };
 
+type ResponderContext = {
+  valid: boolean;
+  used?: boolean;
+  requires_login?: boolean;
+  is_self?: boolean;
+  questions?: Question[];
+  scale_levels?: ScaleLevel[];
+  competencies?: CompetencyOption[];
+};
+
 export default async function RespondPage({
   params,
   searchParams,
@@ -33,21 +43,22 @@ export default async function RespondPage({
   const { error } = await searchParams;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Una invitación por email (cuenta individual, sin ningún miembro
+  // registrado detrás) no exige sesión: el token es la única credencial.
+  // Una invitación normal sí la exige — get_responder_context devuelve
+  // requires_login en ese caso si nadie ha iniciado sesión, o si la
+  // sesión iniciada no es la de esa persona.
+  const { data: context } = await supabase.rpc("get_responder_context", {
+    p_token: token,
+  });
 
-  if (!user) {
+  const ctx = context as ResponderContext | null;
+
+  if (ctx?.requires_login) {
     redirect("/login");
   }
 
-  const { data: invitation } = await supabase
-    .from("feedback_invitations")
-    .select("id, feedback_request_id, used_at, evaluator_category")
-    .eq("token", token)
-    .maybeSingle();
-
-  if (!invitation) {
+  if (!ctx || !ctx.valid) {
     return (
       <main className="flex-1 flex items-center justify-center p-8">
         <div className="max-w-sm text-center">
@@ -63,7 +74,7 @@ export default async function RespondPage({
     );
   }
 
-  if (invitation.used_at) {
+  if (ctx.used) {
     return (
       <main className="flex-1 flex items-center justify-center p-8">
         <div className="max-w-sm text-center">
@@ -77,45 +88,10 @@ export default async function RespondPage({
     );
   }
 
-  const isSelf = invitation.evaluator_category === "self";
-
-  const { data: request } = await supabase
-    .from("feedback_requests")
-    .select("template_id, requester_member_id")
-    .eq("id", invitation.feedback_request_id)
-    .maybeSingle();
-
-  const questionsQuery = supabase
-    .from("survey_questions")
-    .select("id, prompt, required, question_type, max_selections")
-    .eq("template_id", request?.template_id)
-    .order("position");
-
-  const { data: allQuestions } = await questionsQuery;
-
-  // Las preguntas abiertas no se piden en la autoevaluación (nota del
-  // usuario): solo tiene sentido pedirlas sobre otra persona, no sobre uno
-  // mismo. No hay distinción de rol de la persona evaluada — todas las
-  // preguntas del 360 se hacen a cualquier empleado por igual.
-  const questions = (allQuestions as Question[] | null)?.filter(
-    (q) => !(isSelf && q.question_type === "open")
-  );
-
-  const hasScaleQuestions = (questions as Question[] | null)?.some(
-    (q) => q.question_type === "scale"
-  );
-
-  const hasCompetencyQuestions = (questions as Question[] | null)?.some(
-    (q) => q.question_type === "competency"
-  );
-
-  const { data: scaleLevels } = hasScaleQuestions
-    ? await supabase.from("rating_scale_levels").select("level, label").order("level")
-    : { data: null };
-
-  const { data: competencies } = hasCompetencyQuestions
-    ? await supabase.from("competency_frameworks").select("code, name").order("name")
-    : { data: null };
+  const isSelf = Boolean(ctx.is_self);
+  const questions = ctx.questions || [];
+  const scaleLevels = ctx.scale_levels || [];
+  const competencies = ctx.competencies || [];
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
@@ -125,7 +101,7 @@ export default async function RespondPage({
       <p className="text-sm text-gray-600 mb-6">
         {isSelf
           ? "Esta es tu propia valoración: no es anónima, es tu punto de vista."
-          : "Tu respuesta es anónima: ni la persona que la solicitó ni nadie de tu empresa podrá saber que la escribiste tú."}
+          : "Tu respuesta es anónima: ni la persona que la solicitó ni nadie más podrá saber que la escribiste tú."}
       </p>
 
       {error && (
@@ -135,7 +111,7 @@ export default async function RespondPage({
       <form action={submitFeedbackResponse} className="flex flex-col gap-6">
         <input type="hidden" name="token" value={token} />
 
-        {(questions as Question[] | null)?.map((question) => (
+        {questions.map((question) => (
           <div key={question.id} className="flex flex-col gap-1">
             <input type="hidden" name="questionId" value={question.id} />
             <input type="hidden" name="questionType" value={question.question_type} />
@@ -148,7 +124,7 @@ export default async function RespondPage({
 
             {question.question_type === "scale" ? (
               <div className="flex gap-3 mt-1">
-                {(scaleLevels as ScaleLevel[] | null)?.map((level) => (
+                {scaleLevels.map((level) => (
                   <label
                     key={level.level}
                     title={level.label}
@@ -167,7 +143,7 @@ export default async function RespondPage({
             ) : question.question_type === "competency" ? (
               <CompetencyPicker
                 questionId={question.id}
-                competencies={(competencies as CompetencyOption[] | null) || []}
+                competencies={competencies}
                 maxSelections={question.max_selections || 1}
               />
             ) : (

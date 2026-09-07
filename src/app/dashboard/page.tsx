@@ -33,7 +33,7 @@ export default async function DashboardPage() {
 
   let { data: member } = await supabase
     .from("members")
-    .select("id, is_supervisor, organization_id, organizations(name)")
+    .select("id, is_supervisor, organization_id, organizations(name, kind)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -41,9 +41,14 @@ export default async function DashboardPage() {
   // que quedó pendiente al invitarle (alta de empleado, ver
   // 0003_member_invites.sql). El alta de empresa ya no pasa por aquí — la
   // hace el Admin general desde /admin (ver 0016_platform_admin_org_creation.sql).
+  let bootstrapError: string | null = null;
+
   if (!member) {
     const pendingInviteToken = user.user_metadata?.pending_invite_token as
       | string
+      | undefined;
+    const pendingIndividualSignup = user.user_metadata?.pending_individual_signup as
+      | boolean
       | undefined;
 
     if (pendingInviteToken) {
@@ -51,13 +56,47 @@ export default async function DashboardPage() {
         p_token: pendingInviteToken,
       });
 
-      if (!error) {
+      if (error) {
+        bootstrapError = error.message;
+      } else {
         const { data: refreshedMember } = await supabase
           .from("members")
-          .select("id, is_supervisor, organization_id, organizations(name)")
+          .select("id, is_supervisor, organization_id, organizations(name, kind)")
           .eq("auth_user_id", user.id)
           .maybeSingle();
         member = refreshedMember;
+      }
+    } else if (pendingIndividualSignup) {
+      // No se relee "members" después de crearla: se vio en pruebas
+      // reales que esa relectura, en la misma petición, a veces no veía
+      // todavía la fila recién insertada (el primer intento fallaba en
+      // silencio, el segundo ya funcionaba). La función ya devuelve
+      // directamente todo lo necesario para pintar la página.
+      const fullName = (user.user_metadata?.full_name as string | undefined) || "";
+      const { data: created, error } = await supabase
+        .rpc("create_individual_account", {
+          p_full_name: fullName,
+          p_email: user.email,
+        })
+        .single();
+
+      const createdRow = created as unknown as {
+        member_id: string;
+        organization_id: string;
+        organization_name: string;
+        organization_kind: string;
+        is_supervisor: boolean;
+      } | null;
+
+      if (error) {
+        bootstrapError = error.message;
+      } else if (createdRow) {
+        member = {
+          id: createdRow.member_id,
+          is_supervisor: createdRow.is_supervisor,
+          organization_id: createdRow.organization_id,
+          organizations: { name: createdRow.organization_name, kind: createdRow.organization_kind },
+        } as unknown as typeof member;
       }
     }
   }
@@ -69,6 +108,9 @@ export default async function DashboardPage() {
           <p className="mb-4">
             Tu cuenta todavía no está asociada a ninguna organización.
           </p>
+          {bootstrapError && (
+            <p className="mb-4 rounded bg-red-50 text-red-700 text-sm p-3">{bootstrapError}</p>
+          )}
           <form action={signOut} className="mt-4">
             <button className="underline text-sm">Cerrar sesión</button>
           </form>
@@ -77,32 +119,34 @@ export default async function DashboardPage() {
     );
   }
 
-  const orgName = (member.organizations as unknown as { name: string } | null)?.name;
+  // Une a este member cualquier invitación por email que coincida con su
+  // propio email y siga sin responder (sección 4.2/4.3) — se comprueba en
+  // cada visita, no solo al darse de alta, para cubrir también el caso de
+  // recibir una invitación por email después de ya tener cuenta.
+  await supabase.rpc("claim_pending_email_invitations");
 
-  const { data: pendingInvitations } = await supabase
-    .from("feedback_invitations")
-    .select("token, created_at, evaluator_category, feedback_requests(requester_member_id)")
-    .eq("invitee_member_id", member.id)
-    .is("used_at", null)
-    .order("created_at");
+  const org = member.organizations as unknown as { name: string; kind: string } | null;
+  const orgName = org?.name;
+  const isIndividual = org?.kind === "individual";
 
-  const requesterIds = Array.from(
-    new Set(
-      (pendingInvitations || [])
-        .map(
-          (invitation) =>
-            (invitation.feedback_requests as unknown as { requester_member_id: string } | null)
-              ?.requester_member_id
-        )
-        .filter((id): id is string => Boolean(id))
-    )
-  );
-
-  const { data: requesters } = requesterIds.length
-    ? await supabase.from("members").select("id, full_name, email").in("id", requesterIds)
-    : { data: [] as { id: string; full_name: string | null; email: string }[] };
-
-  const requesterById = new Map((requesters || []).map((r) => [r.id, r]));
+  // No se puede montar esto con un select normal + embed a
+  // feedback_requests: quien te invita puede pertenecer a otra
+  // organización (una cuenta individual invitando a otra), y
+  // "feedback_requests scoped to organization" deja ese campo en null en
+  // cuanto cruza de organización. Una sola función que ya devuelve todo
+  // resuelto, sin depender de ningún embed sujeto a esa política.
+  const { data: pendingInvitationsData } = await supabase.rpc("get_my_pending_invitations");
+  const pendingInvitations =
+    (pendingInvitationsData as
+      | {
+          token: string;
+          created_at: string;
+          evaluator_category: string | null;
+          requester_member_id: string;
+          requester_full_name: string | null;
+          requester_email: string;
+        }[]
+      | null) || [];
 
   const { data: myRequests } = await supabase
     .from("feedback_requests")
@@ -163,7 +207,7 @@ export default async function DashboardPage() {
 
       <p className="text-gray-600">
         Sesión iniciada como <strong>{user.email}</strong>
-        {member.is_supervisor ? " (administrador)" : ""}.
+        {member.is_supervisor && !isIndividual ? " (administrador)" : ""}.
       </p>
 
       <div className="flex flex-wrap gap-2.5 mt-5">
@@ -173,13 +217,21 @@ export default async function DashboardPage() {
         >
           Pedir feedback
         </Link>
+        {isIndividual && (
+          <Link
+            href="/dashboard/feedback/nueva-360"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+          >
+            Pedir feedback 360
+          </Link>
+        )}
         <Link
           href="/dashboard/mi-mapa"
           className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
         >
           Mi mapa de competencias
         </Link>
-        {member.is_supervisor && (
+        {member.is_supervisor && !isIndividual && (
           <>
             <Link
               href="/dashboard/members"
@@ -226,10 +278,6 @@ export default async function DashboardPage() {
         ) : (
           <ul className="border rounded divide-y">
             {pendingInvitations.map((invitation) => {
-              const requesterId = (
-                invitation.feedback_requests as unknown as { requester_member_id: string } | null
-              )?.requester_member_id;
-              const requester = requesterId ? requesterById.get(requesterId) : undefined;
               const isSelf = invitation.evaluator_category === "self";
               return (
                 <li
@@ -243,7 +291,9 @@ export default async function DashboardPage() {
                       <>
                         Feedback para{" "}
                         <strong>
-                          {requester?.full_name || requester?.email || "un compañero"}
+                          {invitation.requester_full_name ||
+                            invitation.requester_email ||
+                            "un compañero"}
                         </strong>
                       </>
                     )}

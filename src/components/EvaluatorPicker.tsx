@@ -15,6 +15,9 @@ export default function EvaluatorPicker({
   categoryOptions,
   categoryDefaultValue,
   categoryDefaultsById,
+  minSelected = 1,
+  submitLabel = "Guardar cambios",
+  primary = false,
 }: {
   colleagues: ColleagueRow[];
   checkboxName: string;
@@ -30,6 +33,13 @@ export default function EvaluatorPicker({
   // existentes, cada uno puede tener una distinta) — si no aparece aquí,
   // cae en categoryDefaultValue (caso de gente recién añadida).
   categoryDefaultsById?: Record<string, string>;
+  // El botón de enviar vive aquí dentro (no en la página que lo usa) para
+  // poder desactivarlo mientras no se llegue al mínimo — así una solicitud
+  // enviada de más no manda al usuario a una redirección de error que le
+  // borra todo lo que ya había elegido.
+  minSelected?: number;
+  submitLabel?: string;
+  primary?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>(defaultCheckedIds);
@@ -136,6 +146,27 @@ export default function EvaluatorPicker({
             <li className="px-4 py-3 text-sm text-gray-500">Sin coincidencias.</li>
           )}
         </ul>
+      </div>
+
+      <div>
+        <button
+          type="submit"
+          disabled={selected.length < minSelected}
+          className={
+            primary
+              ? "bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              : "border rounded px-4 py-2 text-sm hover:bg-gray-50 disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+          }
+        >
+          {submitLabel}
+        </button>
+        {selected.length < minSelected && (
+          <p className="text-xs text-gray-400 mt-2">
+            {minSelected === 1
+              ? "Elige al menos a una persona para poder enviar."
+              : `Elige ${minSelected - selected.length} más para poder enviar.`}
+          </p>
+        )}
       </div>
     </div>
   );

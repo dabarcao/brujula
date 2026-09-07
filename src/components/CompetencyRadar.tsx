@@ -21,13 +21,13 @@ export const PRINCIPLE_COLORS: Record<string, string> = {
 
 const DEFAULT_COLOR = "#6b7280";
 
-const PRINCIPLE_ORDER: Record<string, number> = {
+export const PRINCIPLE_ORDER: Record<string, number> = {
   evolutionary_purpose: 0,
   self_organizing_team: 1,
   wholeness: 2,
 };
 
-const PRINCIPLE_LABELS: Record<string, string> = {
+export const PRINCIPLE_LABELS: Record<string, string> = {
   evolutionary_purpose: "Propósito evolutivo",
   self_organizing_team: "Equipo autoorganizado",
   wholeness: "Plenitud",

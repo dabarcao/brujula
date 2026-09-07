@@ -32,7 +32,7 @@ export default async function CyclePage({
 
   const { data: currentMember } = await supabase
     .from("members")
-    .select("id, status")
+    .select("id, status, organization_id")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -76,6 +76,14 @@ export default async function CyclePage({
     .eq("is_supervisor", false)
     .neq("id", currentMember.id)
     .order("email");
+
+  const { data: settings } = await supabase
+    .from("platform_settings")
+    .select("min_invitees_per_request")
+    .eq("organization_id", currentMember.organization_id)
+    .maybeSingle();
+
+  const minInvitees = settings?.min_invitees_per_request ?? 5;
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
@@ -126,14 +134,10 @@ export default async function CyclePage({
               checkboxName="evaluatorId"
               categoryOptions={EVALUATOR_CATEGORY_LABELS}
               categoryDefaultValue="team"
+              minSelected={minInvitees}
+              submitLabel="Confirmar evaluadores"
+              primary
             />
-
-            <button
-              type="submit"
-              className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800 self-start"
-            >
-              Confirmar evaluadores
-            </button>
           </form>
         </>
       )}

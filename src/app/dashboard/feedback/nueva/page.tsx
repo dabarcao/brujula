@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createFeedbackRequest } from "@/app/actions/feedback";
+import { createFeedbackRequest, createFeedbackRequestForIndividual } from "@/app/actions/feedback";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
+import EmailEvaluatorPicker from "@/components/EmailEvaluatorPicker";
 
 type ColleagueRow = {
   id: string;
@@ -10,12 +11,15 @@ type ColleagueRow = {
   full_name: string | null;
 };
 
+// "Por competencias" primero y sin atenuar: es la única con un informe
+// real construido (nota media + percentil). Las demás solo listan
+// respuestas de texto en crudo, sin análisis — se muestran atenuadas.
 const SUBTYPE_LABELS: Record<string, string> = {
+  competencias: "Por competencias",
   general: "General / desarrollo profesional",
   meeting: "Reunión / presentación",
   collaboration: "Colaboración",
   leadership_initiative: "Liderazgo de una iniciativa",
-  competencias: "Por competencias (experimental)",
 };
 
 export default async function NewFeedbackRequestPage({
@@ -36,13 +40,16 @@ export default async function NewFeedbackRequestPage({
 
   const { data: currentMember } = await supabase
     .from("members")
-    .select("id, organization_id, status")
+    .select("id, organization_id, status, organizations(kind)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
   if (!currentMember || currentMember.status !== "active") {
     redirect("/dashboard");
   }
+
+  const isIndividual =
+    (currentMember.organizations as unknown as { kind: string } | null)?.kind === "individual";
 
   const { data: openRequest } = await supabase
     .from("feedback_requests")
@@ -76,14 +83,6 @@ export default async function NewFeedbackRequestPage({
     );
   }
 
-  const { data: colleagues } = await supabase
-    .from("members")
-    .select("id, email, full_name")
-    .eq("status", "active")
-    .eq("is_supervisor", false)
-    .neq("id", currentMember.id)
-    .order("email");
-
   const { data: settings } = await supabase
     .from("platform_settings")
     .select("min_invitees_per_request")
@@ -91,6 +90,49 @@ export default async function NewFeedbackRequestPage({
     .maybeSingle();
 
   const minInvitees = settings?.min_invitees_per_request ?? 5;
+
+  // Cuenta individual: no tiene compañeros dados de alta (su organización
+  // es solo ella), así que invita por email en vez de elegir de una lista.
+  if (isIndividual) {
+    return (
+      <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-semibold">Pedir feedback</h1>
+          <Link href="/dashboard" className="text-sm underline text-gray-600">
+            Volver al panel
+          </Link>
+        </div>
+
+        <p className="text-sm text-gray-600 mb-6">
+          Escribe el email de al menos {minInvitees} personas. Nadie sabrá qué
+          respondió quién, y no verás nada hasta que respondan al menos 3.
+        </p>
+
+        {error && (
+          <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
+        )}
+
+        <form action={createFeedbackRequestForIndividual} className="flex flex-col gap-4">
+          <SubtypeFieldset />
+          <EmailEvaluatorPicker fieldName="inviteeEmails" minEmails={minInvitees} />
+          <button
+            type="submit"
+            className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800 self-start"
+          >
+            Enviar solicitud
+          </button>
+        </form>
+      </main>
+    );
+  }
+
+  const { data: colleagues } = await supabase
+    .from("members")
+    .select("id, email, full_name")
+    .eq("status", "active")
+    .eq("is_supervisor", false)
+    .neq("id", currentMember.id)
+    .order("email");
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
@@ -121,33 +163,43 @@ export default async function NewFeedbackRequestPage({
         </p>
       ) : (
         <form action={createFeedbackRequest} className="flex flex-col gap-4">
-          <fieldset className="border rounded p-4">
-            <legend className="text-sm font-medium px-1">¿Sobre qué es el feedback?</legend>
-            <div className="flex flex-col gap-2 mt-2">
-              {Object.entries(SUBTYPE_LABELS).map(([value, label]) => (
-                <label key={value} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="subtype"
-                    value={value}
-                    defaultChecked={value === "general"}
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <EvaluatorPicker colleagues={colleagues as ColleagueRow[]} checkboxName="inviteeIds" />
-
-          <button
-            type="submit"
-            className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800 self-start"
-          >
-            Enviar solicitud
-          </button>
+          <SubtypeFieldset />
+          <EvaluatorPicker
+            colleagues={colleagues as ColleagueRow[]}
+            checkboxName="inviteeIds"
+            minSelected={minInvitees}
+            submitLabel="Enviar solicitud"
+            primary
+          />
         </form>
       )}
     </main>
+  );
+}
+
+function SubtypeFieldset() {
+  return (
+    <fieldset className="border rounded p-4">
+      <legend className="text-sm font-medium px-1">¿Sobre qué es el feedback?</legend>
+      <div className="flex flex-col gap-2 mt-2">
+        {Object.entries(SUBTYPE_LABELS).map(([value, label]) => (
+          <label
+            key={value}
+            className={
+              "flex items-center gap-2 text-sm" +
+              (value === "competencias" ? "" : " text-gray-400")
+            }
+          >
+            <input
+              type="radio"
+              name="subtype"
+              value={value}
+              defaultChecked={value === "competencias"}
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }

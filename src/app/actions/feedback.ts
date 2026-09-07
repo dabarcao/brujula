@@ -23,6 +23,25 @@ export async function createFeedbackRequest(formData: FormData) {
   redirect("/dashboard?requestCreated=1");
 }
 
+export async function createFeedbackRequestForIndividual(formData: FormData) {
+  const inviteeEmails = formData.getAll("inviteeEmails").map(String);
+  const subtype = String(formData.get("subtype") || "general");
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("create_ad_hoc_feedback_request_for_individual", {
+    p_invitee_emails: inviteeEmails,
+    p_subtype: subtype,
+  });
+
+  if (error) {
+    redirect("/dashboard/feedback/nueva?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/dashboard");
+  redirect("/dashboard?requestCreated=1");
+}
+
 export async function cancelFeedbackRequest(formData: FormData) {
   const requestId = String(formData.get("requestId") || "");
 
@@ -124,6 +143,17 @@ export async function submitFeedbackResponse(formData: FormData) {
 
   if (error) {
     redirect(`/responder/${token}?error=` + encodeURIComponent(error.message));
+  }
+
+  // Quien respondió por email (sin cuenta) no tiene panel al que volver —
+  // se le manda de vuelta al mismo token, que ahora ya está usado y
+  // muestra la pantalla de "gracias por tu feedback".
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect(`/responder/${token}`);
   }
 
   revalidatePath("/dashboard");

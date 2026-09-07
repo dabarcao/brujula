@@ -90,15 +90,10 @@ export default async function NewCyclePage({
           <EvaluatorPicker
             colleagues={(colleagues as ColleagueRow[] | null) || []}
             checkboxName="participantId"
+            submitLabel="Crear ciclo"
+            primary
           />
         </div>
-
-        <button
-          type="submit"
-          className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800 self-start mt-2"
-        >
-          Crear ciclo
-        </button>
       </form>
     </main>
   );

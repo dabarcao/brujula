@@ -54,6 +54,25 @@ export async function organizeCycleEvaluators(formData: FormData) {
   redirect("/dashboard?cycleOrganized=1");
 }
 
+export async function createIndividualCycleRequest(formData: FormData) {
+  const evaluatorEmails = formData.getAll("evaluatorEmails").map(String);
+  const categories = evaluatorEmails.map((email) => String(formData.get(`category_${email}`) || ""));
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("create_individual_cycle_request", {
+    p_evaluator_emails: evaluatorEmails,
+    p_evaluator_categories: categories,
+  });
+
+  if (error) {
+    redirect("/dashboard/feedback/nueva-360?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/dashboard");
+  redirect("/dashboard?requestCreated=1");
+}
+
 export async function updateCycleRequestEvaluators(formData: FormData) {
   const requestId = String(formData.get("requestId") || "");
   const evaluatorIds = formData.getAll("evaluatorId").map(String);
