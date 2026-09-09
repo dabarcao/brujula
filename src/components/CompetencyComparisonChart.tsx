@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { PRINCIPLE_COLORS, PRINCIPLE_LABELS, PRINCIPLE_ORDER } from "@/components/CompetencyRadar";
+import { GROUP_COLORS, GROUP_LABELS, GROUP_ORDER } from "@/components/CompetencyRadar";
 import { EVALUATOR_CATEGORY_LABELS } from "@/lib/evaluatorCategories";
 
 type Axis = {
   code: string;
   name: string;
-  principleCode: string;
+  // Rol VACC (visionario/arquitecto/catalizador/coach) o "plenitud" —
+  // ver CompetencyRadar, mismo mecanismo de agrupación/color.
+  groupCode: string;
   selfValue: number | null;
   peerAvgValue: number | null;
 };
@@ -31,13 +33,13 @@ export default function CompetencyComparisonChart({
   axes: Axis[];
   categorySeries: CategorySeries[];
 }) {
-  // Igual que en CompetencyRadar: los ejes siempre se agrupan por
-  // dimensión antes de dibujarlos, sin importar en qué orden lleguen de
-  // la consulta (get_request_competency_comparison ordena por nombre de
-  // competencia, no por dimensión) — si no, los colores de las 3
-  // dimensiones salen intercalados en vez de en 3 bloques contiguos.
+  // Igual que en CompetencyRadar: los ejes siempre se agrupan por rol
+  // antes de dibujarlos, sin importar en qué orden lleguen de la
+  // consulta (get_request_competency_comparison ordena por nombre de
+  // competencia, no por rol) — si no, los colores de cada grupo salen
+  // intercalados en vez de en bloques contiguos.
   const axes = [...rawAxes].sort(
-    (a, b) => (PRINCIPLE_ORDER[a.principleCode] ?? 99) - (PRINCIPLE_ORDER[b.principleCode] ?? 99)
+    (a, b) => (GROUP_ORDER[a.groupCode] ?? 99) - (GROUP_ORDER[b.groupCode] ?? 99)
   );
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set());
 
@@ -50,7 +52,7 @@ export default function CompetencyComparisonChart({
 
   const points = axes.map((axis, i) => {
     const angle = angleFor(i);
-    const color = PRINCIPLE_COLORS[axis.principleCode] || "#6b7280";
+    const color = GROUP_COLORS[axis.groupCode] || "#6b7280";
     return {
       ...axis,
       color,
@@ -72,7 +74,7 @@ export default function CompetencyComparisonChart({
       const p1y = center + Math.sin(a1) * r;
       const p2x = center + Math.cos(a2) * r;
       const p2y = center + Math.sin(a2) * r;
-      const color = PRINCIPLE_COLORS[axis.principleCode] || "#6b7280";
+      const color = GROUP_COLORS[axis.groupCode] || "#6b7280";
       return {
         code: axis.code,
         color,
@@ -102,6 +104,12 @@ export default function CompetencyComparisonChart({
   }
 
   const seriesByCategory = new Map(categorySeries.map((s) => [s.category, s.valuesByCode]));
+
+  // Solo los grupos representados en estos ejes — así el mini-gráfico de
+  // Plenitud no arrastra una leyenda con los 4 roles que no dibuja.
+  const groupsPresent = Array.from(new Set(axes.map((a) => a.groupCode))).sort(
+    (a, b) => (GROUP_ORDER[a] ?? 99) - (GROUP_ORDER[b] ?? 99)
+  );
 
   // Escala de referencia (1-5) dibujada en el hueco entre el último eje y
   // el primero, para no solaparse con ningún radio ni etiqueta de
@@ -229,13 +237,13 @@ export default function CompetencyComparisonChart({
       </svg>
 
       <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 mt-1">
-        {Object.entries(PRINCIPLE_LABELS).map(([code, label]) => (
+        {groupsPresent.map((code) => (
           <span key={code} className="flex items-center gap-1.5">
             <span
               className="inline-block w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: PRINCIPLE_COLORS[code], opacity: 0.5 }}
+              style={{ backgroundColor: GROUP_COLORS[code] || "#6b7280", opacity: 0.5 }}
             />
-            {label} (media)
+            {GROUP_LABELS[code] || code} (media)
           </span>
         ))}
         <span className="flex items-center gap-1.5">

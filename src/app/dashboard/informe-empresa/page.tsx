@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import CompetencyRadar from "@/components/CompetencyRadar";
 import {
   buildCompetencyAxes,
-  computeDimensionAverages,
+  computeGroupAverages,
+  splitVaccAndPlenitud,
   type FrameworkRow,
 } from "@/lib/competencyAxes";
 
@@ -39,7 +40,9 @@ export default async function InformeEmpresaPage() {
   const [{ data: frameworkData }, { data: summaryData }] = await Promise.all([
     supabase
       .from("competency_frameworks")
-      .select("code, name, principle_id, competency_principles(code, name, position)")
+      .select(
+        "code, name, principle_id, role_id, competency_principles(code, name, position), competency_roles(code, name, position)"
+      )
       .order("name"),
     supabase.rpc("get_organization_competency_summary"),
   ]);
@@ -51,7 +54,15 @@ export default async function InformeEmpresaPage() {
 
   const axes = buildCompetencyAxes(frameworks, avgByCode);
   const hasAnyData = axes.some((axis) => axis.avgValue != null);
-  const dimensionCards = computeDimensionAverages(axes);
+  const groupCards = computeGroupAverages(axes);
+  const { vacc, plenitud } = splitVaccAndPlenitud(axes);
+  const toRadarAxes = (list: typeof axes) =>
+    list.map((a) => ({
+      code: a.code,
+      name: a.name,
+      groupCode: a.roleCode || "plenitud",
+      avgValue: a.avgValue,
+    }));
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
@@ -75,7 +86,7 @@ export default async function InformeEmpresaPage() {
           </p>
 
           <div className="grid grid-cols-3 gap-3 mb-8">
-            {dimensionCards.map((card) => (
+            {groupCards.map((card) => (
               <div key={card.code} className="border rounded p-4 text-center">
                 <p className="text-xs text-gray-500 mb-1">{card.name}</p>
                 <p className="text-2xl font-semibold">{card.average.toFixed(1)}</p>
@@ -83,8 +94,16 @@ export default async function InformeEmpresaPage() {
             ))}
           </div>
 
-          <div className="flex justify-center">
-            <CompetencyRadar axes={axes} />
+          <div className="flex flex-col items-center gap-10">
+            <div className="flex justify-center w-full">
+              <CompetencyRadar axes={toRadarAxes(vacc)} />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-2 text-center">
+                Plenitud — no vive dentro de ningún rol, se ve aparte
+              </p>
+              <CompetencyRadar axes={toRadarAxes(plenitud)} />
+            </div>
           </div>
         </>
       )}

@@ -1,11 +1,19 @@
 // Gráfico de araña dibujado a mano en SVG (sin librería de gráficos: es
-// geometría fija de 14 ejes conocidos, no justifica una dependencia nueva).
+// geometría fija de N ejes conocidos, no justifica una dependencia nueva).
 // Server Component — no necesita "use client", no hay interactividad.
+//
+// Un mismo componente sirve tanto para el radar grande de los 4 roles
+// VACC (12 ejes) como para el mini-radar de Plenitud (3 ejes) — Plenitud
+// no vive dentro de ningún rol (docs/modelo_roles_vacc.md), así que se
+// dibuja aparte en vez de mezclada en el mismo círculo ("Opción A").
 
 type Axis = {
   code: string;
   name: string;
-  principleCode: string;
+  // Rol VACC (visionario/arquitecto/catalizador/coach) para el radar
+  // grande, o "plenitud" para el mini-radar — un solo grupo, un solo
+  // color, sin necesidad de leyenda con 5 entradas a la vez.
+  groupCode: string;
   avgValue: number | null;
   // Autoevaluación del propio empleado — solo se rellena en el
   // comparativo del ciclo 360 (ver get_request_competency_comparison).
@@ -13,33 +21,39 @@ type Axis = {
   selfValue?: number | null;
 };
 
-export const PRINCIPLE_COLORS: Record<string, string> = {
-  evolutionary_purpose: "#2563eb",
-  self_organizing_team: "#059669",
-  wholeness: "#ea580c",
+export const GROUP_COLORS: Record<string, string> = {
+  visionario: "#2563eb",
+  arquitecto: "#059669",
+  catalizador: "#ea580c",
+  coach: "#7c3aed",
+  plenitud: "#6b7280",
 };
 
 const DEFAULT_COLOR = "#6b7280";
 
-export const PRINCIPLE_ORDER: Record<string, number> = {
-  evolutionary_purpose: 0,
-  self_organizing_team: 1,
-  wholeness: 2,
+export const GROUP_ORDER: Record<string, number> = {
+  visionario: 0,
+  arquitecto: 1,
+  catalizador: 2,
+  coach: 3,
+  plenitud: 4,
 };
 
-export const PRINCIPLE_LABELS: Record<string, string> = {
-  evolutionary_purpose: "Propósito evolutivo",
-  self_organizing_team: "Equipo autoorganizado",
-  wholeness: "Plenitud",
+export const GROUP_LABELS: Record<string, string> = {
+  visionario: "Visionario",
+  arquitecto: "Arquitecto",
+  catalizador: "Catalizador",
+  coach: "Coach",
+  plenitud: "Plenitud",
 };
 
 export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
-  // Los ejes siempre se agrupan por dimensión antes de dibujarlos, sin
+  // Los ejes siempre se agrupan por rol antes de dibujarlos, sin
   // importar en qué orden lleguen desde la consulta — si no, los colores
-  // de las 3 dimensiones salen intercalados alrededor del círculo en vez
-  // de en 3 bloques contiguos.
+  // de cada grupo salen intercalados alrededor del círculo en vez de en
+  // bloques contiguos.
   const axes = [...rawAxes].sort(
-    (a, b) => (PRINCIPLE_ORDER[a.principleCode] ?? 99) - (PRINCIPLE_ORDER[b.principleCode] ?? 99)
+    (a, b) => (GROUP_ORDER[a.groupCode] ?? 99) - (GROUP_ORDER[b.groupCode] ?? 99)
   );
   const size = 440;
   const center = size / 2;
@@ -50,7 +64,7 @@ export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
 
   const points = axes.map((axis, i) => {
     const angle = angleFor(i);
-    const color = PRINCIPLE_COLORS[axis.principleCode] || DEFAULT_COLOR;
+    const color = GROUP_COLORS[axis.groupCode] || DEFAULT_COLOR;
     const hasValue = axis.avgValue != null;
     const dataRadius = hasValue ? maxRadius * ((axis.avgValue as number) / 5) : null;
     return {
@@ -107,6 +121,13 @@ export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
       selfSegments.push(`M ${a.x} ${a.y} L ${b.x} ${b.y}`);
     }
   }
+
+  // Solo los grupos que de verdad están representados en estos ejes —
+  // así el mini-radar de Plenitud no arrastra una leyenda con los 4
+  // roles que no dibuja.
+  const groupsPresent = Array.from(new Set(axes.map((a) => a.groupCode))).sort(
+    (a, b) => (GROUP_ORDER[a] ?? 99) - (GROUP_ORDER[b] ?? 99)
+  );
 
   return (
     <div className="flex flex-col items-center">
@@ -166,13 +187,13 @@ export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
         ))}
       </svg>
       <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 mt-1">
-        {Object.entries(PRINCIPLE_LABELS).map(([code, label]) => (
+        {groupsPresent.map((code) => (
           <span key={code} className="flex items-center gap-1.5">
             <span
               className="inline-block w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: PRINCIPLE_COLORS[code] }}
+              style={{ backgroundColor: GROUP_COLORS[code] || DEFAULT_COLOR }}
             />
-            {label}
+            {GROUP_LABELS[code] || code}
           </span>
         ))}
       </div>

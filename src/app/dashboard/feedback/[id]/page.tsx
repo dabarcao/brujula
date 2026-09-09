@@ -122,6 +122,8 @@ type CompetencyComparisonRow = {
   competency_name: string;
   principle_code: string | null;
   principle_name: string | null;
+  role_code: string | null;
+  role_name: string | null;
   self_value: number | null;
   peer_avg_value: number | null;
   peer_response_count: number;
@@ -138,8 +140,12 @@ type CompetencyByCategoryRow = {
 // en un ciclo 360 (es el único flujo con autoevaluación). El "por
 // competencias" libre (ad_hoc) sigue usando CompetencySummaryTable. Cada
 // grupo de evaluador (jefe/equipo/empresa/otro) solo aparece aquí si ya
-// tiene sus 3 respuestas mínimas — get_request_competency_by_category ya
-// filtra eso, aquí no hay que volver a comprobarlo.
+// tiene su mínimo cumplido — get_request_competency_by_category ya lo
+// filtra, aquí no hay que volver a comprobarlo.
+//
+// Plenitud no vive dentro de ningún rol VACC (docs/modelo_roles_vacc.md)
+// — se dibuja en su propio mini-radar, aparte del de los 4 roles, en vez
+// de mezclada en el mismo círculo.
 function CompetencyComparison({
   rows,
   byCategoryRows,
@@ -151,10 +157,12 @@ function CompetencyComparison({
   const axes = rows.map((row) => ({
     code: row.competency_code,
     name: row.competency_name,
-    principleCode: row.principle_code || "",
+    groupCode: row.role_code || "plenitud",
     peerAvgValue: row.peer_avg_value,
     selfValue: row.self_value,
   }));
+  const vaccAxes = axes.filter((axis) => axis.groupCode !== "plenitud");
+  const plenitudAxes = axes.filter((axis) => axis.groupCode === "plenitud");
 
   const byCategory = new Map<string, Record<string, number>>();
   for (const row of byCategoryRows) {
@@ -169,8 +177,18 @@ function CompetencyComparison({
   }));
 
   return (
-    <div className="mb-8">
-      <CompetencyComparisonChart axes={axes} categorySeries={categorySeries} />
+    <div className="mb-8 flex flex-col gap-10">
+      {vaccAxes.length > 0 && (
+        <CompetencyComparisonChart axes={vaccAxes} categorySeries={categorySeries} />
+      )}
+      {plenitudAxes.length > 0 && (
+        <div>
+          <p className="text-xs text-gray-500 mb-2 text-center">
+            Plenitud — no vive dentro de ningún rol, se ve aparte
+          </p>
+          <CompetencyComparisonChart axes={plenitudAxes} categorySeries={categorySeries} />
+        </div>
+      )}
     </div>
   );
 }

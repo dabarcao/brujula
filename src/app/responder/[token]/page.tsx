@@ -17,6 +17,11 @@ type ScaleLevel = {
   label: string;
 };
 
+// Pasos de 0,5 dentro del rango 1-5 — rating_scale_levels solo describe
+// las 5 anclas enteras (sección 5.2), los pasos intermedios no llevan
+// descripción propia, solo el número.
+const SCALE_STEPS = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
+
 type CompetencyOption = {
   code: string;
   name: string;
@@ -123,22 +128,25 @@ export default async function RespondPage({
             </label>
 
             {question.question_type === "scale" ? (
-              <div className="flex gap-3 mt-1">
-                {scaleLevels.map((level) => (
-                  <label
-                    key={level.level}
-                    title={level.label}
-                    className="flex flex-col items-center gap-1 text-xs text-gray-600"
-                  >
-                    <input
-                      type="radio"
-                      name={`answer_${question.id}`}
-                      value={level.level}
-                      required={question.required}
-                    />
-                    {level.level}
-                  </label>
-                ))}
+              <div className="flex gap-2 mt-1">
+                {SCALE_STEPS.map((step) => {
+                  const anchor = scaleLevels.find((level) => level.level === step);
+                  return (
+                    <label
+                      key={step}
+                      title={anchor?.label}
+                      className="flex flex-col items-center gap-1 text-xs text-gray-600"
+                    >
+                      <input
+                        type="radio"
+                        name={`answer_${question.id}`}
+                        value={step}
+                        required={question.required}
+                      />
+                      {step}
+                    </label>
+                  );
+                })}
               </div>
             ) : question.question_type === "competency" ? (
               <CompetencyPicker

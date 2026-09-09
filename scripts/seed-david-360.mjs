@@ -65,8 +65,10 @@ function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+const SCALE_STEPS = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
+
 function randScale() {
-  return Math.floor(Math.random() * 5) + 1;
+  return SCALE_STEPS[Math.floor(Math.random() * SCALE_STEPS.length)];
 }
 
 async function main() {
