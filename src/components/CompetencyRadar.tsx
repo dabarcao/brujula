@@ -25,7 +25,11 @@ export const GROUP_COLORS: Record<string, string> = {
   visionario: "#2563eb",
   arquitecto: "#059669",
   catalizador: "#ea580c",
-  coach: "#7c3aed",
+  // Antes violeta (#7c3aed) — coincidía exactamente con el color de la
+  // categoría de evaluador "Jefe" (CompetencyComparisonChart), que se
+  // ve en el mismo gráfico. Verde-lima: distinto del azul de Visionario
+  // y del ámbar que ya usa "Compañero de la empresa".
+  coach: "#65a30d",
   plenitud: "#dc2626",
 };
 
@@ -143,8 +147,11 @@ export default function CompetencyRadar({
         quadrants.push({
           code: axes[runStart].groupCode,
           d: `M ${center} ${center} L ${p1x} ${p1y} A ${maxRadius} ${maxRadius} 0 ${largeArc} 1 ${p2x} ${p2y} Z`,
-          labelX: round(center + Math.cos(midAngle) * (maxRadius + 44)),
-          labelY: round(center + Math.sin(midAngle) * (maxRadius + 44)),
+          // Dentro del propio gajo (no en el anillo exterior, donde
+          // chocaba con las etiquetas de competencia) — una palabra de
+          // fondo, grande y tenue, en vez de competir por sitio.
+          labelX: round(center + Math.cos(midAngle) * (maxRadius * 0.55)),
+          labelY: round(center + Math.sin(midAngle) * (maxRadius * 0.55)),
         });
         runStart = i;
       }
@@ -189,6 +196,21 @@ export default function CompetencyRadar({
       <svg viewBox={`0 0 ${size} ${size}`} width="100%" style={{ maxWidth: size }}>
         {quadrants.map((q) => (
           <path key={`quadrant-${q.code}`} d={q.d} fill={GROUP_COLORS[q.code] || DEFAULT_COLOR} opacity={0.07} />
+        ))}
+        {quadrants.map((q) => (
+          <text
+            key={`quadrant-label-${q.code}`}
+            x={q.labelX}
+            y={q.labelY}
+            fontSize={14}
+            fontWeight={600}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={GROUP_COLORS[q.code] || DEFAULT_COLOR}
+            opacity={0.3}
+          >
+            {GROUP_LABELS[q.code] || q.code}
+          </text>
         ))}
         {rings.map((ring) => (
           <polygon
@@ -241,22 +263,6 @@ export default function CompetencyRadar({
             fill={p.color}
           >
             {p.name}
-          </text>
-        ))}
-        {quadrants.map((q) => (
-          <text
-            key={`quadrant-label-${q.code}`}
-            x={q.labelX}
-            y={q.labelY}
-            fontSize={12}
-            fontWeight={600}
-            textAnchor={
-              Math.abs(q.labelX - center) < 4 ? "middle" : q.labelX > center ? "start" : "end"
-            }
-            dominantBaseline="middle"
-            fill={GROUP_COLORS[q.code] || DEFAULT_COLOR}
-          >
-            {GROUP_LABELS[q.code] || q.code}
           </text>
         ))}
       </svg>

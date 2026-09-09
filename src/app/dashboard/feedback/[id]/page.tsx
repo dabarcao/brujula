@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/feedback";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
 import CompetencyComparisonChart from "@/components/CompetencyComparisonChart";
+import CompetencyBars from "@/components/CompetencyBars";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -183,15 +184,19 @@ function CompetencyComparison({
           axes={vaccAxes}
           categorySeries={categorySeries}
           order={0}
-          size={380}
+          size={400}
         />
       )}
       {plenitudAxes.length > 0 && (
-        <CompetencyComparisonChart
-          axes={plenitudAxes}
+        <CompetencyBars
+          axes={plenitudAxes.map((axis) => ({
+            code: axis.code,
+            name: axis.name,
+            avgValue: axis.peerAvgValue,
+            selfValue: axis.selfValue,
+          }))}
           categorySeries={categorySeries}
           order={1}
-          size={180}
           caption="Plenitud — no vive dentro de ningún rol, se ve aparte"
         />
       )}

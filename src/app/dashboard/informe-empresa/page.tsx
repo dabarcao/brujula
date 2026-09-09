@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CompetencyRadar from "@/components/CompetencyRadar";
+import CompetencyBars from "@/components/CompetencyBars";
 import {
   buildCompetencyAxes,
   computeGroupAverages,
@@ -95,10 +96,9 @@ export default async function InformeEmpresaPage() {
           </div>
 
           <div className="flex flex-wrap justify-center items-start gap-8">
-            <CompetencyRadar axes={toRadarAxes(vacc)} size={380} />
-            <CompetencyRadar
-              axes={toRadarAxes(plenitud)}
-              size={180}
+            <CompetencyRadar axes={toRadarAxes(vacc)} size={400} />
+            <CompetencyBars
+              axes={plenitud.map((a) => ({ code: a.code, name: a.name, avgValue: a.avgValue }))}
               caption="Plenitud — no vive dentro de ningún rol, se ve aparte"
             />
           </div>

@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { GROUP_COLORS, GROUP_LABELS, GROUP_ORDER } from "@/components/CompetencyRadar";
-import { EVALUATOR_CATEGORY_LABELS } from "@/lib/evaluatorCategories";
+import {
+  EVALUATOR_CATEGORY_LABELS,
+  EVALUATOR_CATEGORY_COLORS as CATEGORY_COLORS,
+} from "@/lib/evaluatorCategories";
 
 type Axis = {
   code: string;
@@ -17,13 +20,6 @@ type Axis = {
 type CategorySeries = {
   category: string;
   valuesByCode: Record<string, number>;
-};
-
-const CATEGORY_COLORS: Record<string, string> = {
-  manager: "#7c3aed",
-  team: "#0891b2",
-  organization: "#ca8a04",
-  other: "#db2777",
 };
 
 export default function CompetencyComparisonChart({
@@ -113,8 +109,11 @@ export default function CompetencyComparisonChart({
         quadrants.push({
           code: axes[runStart].groupCode,
           d: `M ${center} ${center} L ${p1x} ${p1y} A ${maxRadius} ${maxRadius} 0 ${largeArc} 1 ${p2x} ${p2y} Z`,
-          labelX: round(center + Math.cos(midAngle) * (maxRadius + 44)),
-          labelY: round(center + Math.sin(midAngle) * (maxRadius + 44)),
+          // Dentro del propio gajo (no en el anillo exterior, donde
+          // chocaba con las etiquetas de competencia) — palabra de
+          // fondo, grande y tenue, en vez de competir por sitio.
+          labelX: round(center + Math.cos(midAngle) * (maxRadius * 0.55)),
+          labelY: round(center + Math.sin(midAngle) * (maxRadius * 0.55)),
         });
         runStart = i;
       }
@@ -222,6 +221,21 @@ export default function CompetencyComparisonChart({
               opacity={0.07}
             />
           ))}
+          {quadrants.map((q) => (
+            <text
+              key={`quadrant-label-${q.code}`}
+              x={q.labelX}
+              y={q.labelY}
+              fontSize={14}
+              fontWeight={600}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill={GROUP_COLORS[q.code] || "#6b7280"}
+              opacity={0.3}
+            >
+              {GROUP_LABELS[q.code] || q.code}
+            </text>
+          ))}
           {[1, 2, 3, 4, 5].map((level) => (
             <circle
               key={level}
@@ -296,22 +310,6 @@ export default function CompetencyComparisonChart({
               fill={p.color}
             >
               {p.name}
-            </text>
-          ))}
-          {quadrants.map((q) => (
-            <text
-              key={`quadrant-label-${q.code}`}
-              x={q.labelX}
-              y={q.labelY}
-              fontSize={12}
-              fontWeight={600}
-              textAnchor={
-                Math.abs(q.labelX - center) < 4 ? "middle" : q.labelX > center ? "start" : "end"
-              }
-              dominantBaseline="middle"
-              fill={GROUP_COLORS[q.code] || "#6b7280"}
-            >
-              {GROUP_LABELS[q.code] || q.code}
             </text>
           ))}
         </svg>
