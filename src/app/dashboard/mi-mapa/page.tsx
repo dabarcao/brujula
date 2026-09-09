@@ -2,11 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CompetencyRadar from "@/components/CompetencyRadar";
-import CompetencyBars from "@/components/CompetencyBars";
 import {
   buildCompetencyAxes,
   computeGroupAverages,
-  splitVaccAndPlenitud,
   type FrameworkRow,
 } from "@/lib/competencyAxes";
 
@@ -54,14 +52,12 @@ export default async function MiMapaDeCompetenciasPage() {
   const axes = buildCompetencyAxes(frameworks, avgByCode);
   const hasAnyData = axes.some((axis) => axis.avgValue != null);
   const groupCards = computeGroupAverages(axes);
-  const { vacc, plenitud } = splitVaccAndPlenitud(axes);
-  const toRadarAxes = (list: typeof axes) =>
-    list.map((a) => ({
-      code: a.code,
-      name: a.name,
-      groupCode: a.roleCode || "plenitud",
-      avgValue: a.avgValue,
-    }));
+  const radarAxes = axes.map((a) => ({
+    code: a.code,
+    name: a.name,
+    groupCode: a.roleCode || "plenitud",
+    avgValue: a.avgValue,
+  }));
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
@@ -94,12 +90,8 @@ export default async function MiMapaDeCompetenciasPage() {
             ))}
           </div>
 
-          <div className="flex flex-wrap justify-center items-start gap-8">
-            <CompetencyRadar axes={toRadarAxes(vacc)} size={400} />
-            <CompetencyBars
-              axes={plenitud.map((a) => ({ code: a.code, name: a.name, avgValue: a.avgValue }))}
-              caption="Plenitud — no vive dentro de ningún rol, se ve aparte"
-            />
+          <div className="flex justify-center">
+            <CompetencyRadar axes={radarAxes} />
           </div>
         </>
       )}

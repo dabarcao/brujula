@@ -26,24 +26,10 @@ export default function CompetencyComparisonChart({
   axes: rawAxes,
   categorySeries,
   size = 440,
-  // El gráfico y la tabla se devuelven como hermanos sueltos (no
-  // envueltos en un único div) para que, cuando la página coloque varias
-  // instancias (VACC + Plenitud) dentro de un mismo contenedor flex, se
-  // puedan reordenar por CSS: todos los gráficos arriba, juntos, y todas
-  // las tablas debajo — sin necesidad de compartir estado entre
-  // instancias. "order" es la posición entre los gráficos; la tabla usa
-  // order+100 para quedar siempre después de todos ellos.
-  order = 0,
-  // Texto corto encima del propio gráfico (p. ej. para Plenitud) —
-  // vive dentro del bloque con "order", así no se puede descolocar al
-  // reordenar con flexbox.
-  caption,
 }: {
   axes: Axis[];
   categorySeries: CategorySeries[];
   size?: number;
-  order?: number;
-  caption?: string;
 }) {
   // Igual que en CompetencyRadar: los ejes siempre se agrupan por rol
   // antes de dibujarlos, sin importar en qué orden lleguen de la
@@ -65,11 +51,13 @@ export default function CompetencyComparisonChart({
   const center = size / 2;
   const maxRadius = center - (showQuadrants ? 100 : 90);
   const halfWidth = Math.PI / n;
-  // Girado medio hueco: el límite entre el último grupo y el primero cae
-  // justo en las 12:00, en vez de que el primer eje se siente ahí y su
-  // gajo se reparta medio hueco a cada lado de esa línea (ver
-  // CompetencyRadar — mismo motivo).
-  const angleFor = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2 + halfWidth;
+
+  // Centra el PRIMER grupo (Plenitud) arriba del todo — ver
+  // CompetencyRadar para la explicación completa de esta fórmula.
+  const firstGroupSize = axes.filter((a) => a.groupCode === axes[0]?.groupCode).length;
+  const centerIndex = (firstGroupSize - 1) / 2;
+  const angleFor = (i: number) => ((Math.PI * 2) / n) * (i - centerIndex) - Math.PI / 2;
+
   // Redondeado a 2 decimales: Math.cos/Math.sin pueden dar un último
   // dígito distinto entre el render de servidor y el del navegador —
   // con 15 decimales de precisión en el string del "d" del SVG, eso ya
@@ -91,7 +79,7 @@ export default function CompetencyComparisonChart({
   });
 
   // Un gajo de fondo por rol, igual que en CompetencyRadar — deja claro
-  // a qué cuadrante pertenece cada competencia sin leer la leyenda.
+  // a qué sector pertenece cada competencia sin leer la leyenda.
   const quadrants: { code: string; d: string; labelX: number; labelY: number }[] = [];
   if (showQuadrants) {
     let runStart = 0;
@@ -162,10 +150,10 @@ export default function CompetencyComparisonChart({
 
   const seriesByCategory = new Map(categorySeries.map((s) => [s.category, s.valuesByCode]));
 
-  // Escala de referencia (1-5) en el hueco entre el último eje y el
-  // primero — con el giro de arriba ese hueco cae ya centrado justo en
-  // las 12:00, no hace falta compensarlo aparte.
-  const scaleAngle = -Math.PI / 2;
+  // Escala de referencia (1-5) — con Plenitud centrada arriba, el hueco
+  // limpio más cercano a la vertical opuesta es el que separa Arquitecto
+  // de Catalizador (justo abajo del todo con 5 sectores iguales).
+  const scaleAngle = Math.PI / 2;
   const scaleTicks = [1, 2, 3, 4, 5].map((level) => {
     const r = maxRadius * (level / 5);
     return {
@@ -206,197 +194,189 @@ export default function CompetencyComparisonChart({
   };
 
   return (
-    <>
-      <div
-        className="flex flex-col items-center"
-        style={{ order, width: "100%", maxWidth: size }}
-      >
-        {caption && <p className="text-xs text-gray-500 mb-2 text-center">{caption}</p>}
-        <svg viewBox={`0 0 ${size} ${size}`} width="100%" style={{ maxWidth: size }}>
-          {quadrants.map((q) => (
-            <path
-              key={`quadrant-${q.code}`}
-              d={q.d}
-              fill={GROUP_COLORS[q.code] || "#6b7280"}
-              opacity={0.07}
+    <div className="flex flex-col items-center w-full">
+      <svg viewBox={`0 0 ${size} ${size}`} width="100%" style={{ maxWidth: size }}>
+        {quadrants.map((q) => (
+          <path
+            key={`quadrant-${q.code}`}
+            d={q.d}
+            fill={GROUP_COLORS[q.code] || "#6b7280"}
+            opacity={0.07}
+          />
+        ))}
+        {quadrants.map((q) => (
+          <text
+            key={`quadrant-label-${q.code}`}
+            x={q.labelX}
+            y={q.labelY}
+            fontSize={14}
+            fontWeight={600}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={GROUP_COLORS[q.code] || "#6b7280"}
+            opacity={0.3}
+          >
+            {GROUP_LABELS[q.code] || q.code}
+          </text>
+        ))}
+        {[1, 2, 3, 4, 5].map((level) => (
+          <circle
+            key={level}
+            cx={center}
+            cy={center}
+            r={maxRadius * (level / 5)}
+            fill="none"
+            stroke="#e5e7eb"
+            strokeWidth={1}
+          />
+        ))}
+        {points.map((p) => (
+          <line
+            key={`axis-${p.code}`}
+            x1={center}
+            y1={center}
+            x2={p.axisX}
+            y2={p.axisY}
+            stroke="#e5e7eb"
+            strokeWidth={1}
+          />
+        ))}
+        {wedges.map((w) => (
+          <path key={`wedge-${w.code}`} d={w.d} fill={w.color} opacity={0.18} />
+        ))}
+        {categorySeries.map((series) =>
+          activeCategories.has(series.category) ? (
+            <CategoryLine
+              key={series.category}
+              axes={axes}
+              valuesByCode={series.valuesByCode}
+              color={CATEGORY_COLORS[series.category] || "#6b7280"}
+              center={center}
+              maxRadius={maxRadius}
+              angleFor={angleFor}
             />
+          ) : null
+        )}
+        {hasAnySelf &&
+          selfSegments.map((d, i) => (
+            <path key={`self-${i}`} d={d} fill="none" stroke="#111827" strokeWidth={2} />
           ))}
-          {quadrants.map((q) => (
-            <text
-              key={`quadrant-label-${q.code}`}
-              x={q.labelX}
-              y={q.labelY}
-              fontSize={14}
-              fontWeight={600}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fill={GROUP_COLORS[q.code] || "#6b7280"}
-              opacity={0.3}
-            >
-              {GROUP_LABELS[q.code] || q.code}
-            </text>
-          ))}
-          {[1, 2, 3, 4, 5].map((level) => (
-            <circle
-              key={level}
-              cx={center}
-              cy={center}
-              r={maxRadius * (level / 5)}
-              fill="none"
-              stroke="#e5e7eb"
-              strokeWidth={1}
-            />
-          ))}
-          {points.map((p) => (
-            <line
-              key={`axis-${p.code}`}
-              x1={center}
-              y1={center}
-              x2={p.axisX}
-              y2={p.axisY}
-              stroke="#e5e7eb"
-              strokeWidth={1}
-            />
-          ))}
-          {wedges.map((w) => (
-            <path key={`wedge-${w.code}`} d={w.d} fill={w.color} opacity={0.18} />
-          ))}
-          {categorySeries.map((series) =>
-            activeCategories.has(series.category) ? (
-              <CategoryLine
-                key={series.category}
-                axes={axes}
-                valuesByCode={series.valuesByCode}
-                color={CATEGORY_COLORS[series.category] || "#6b7280"}
-                center={center}
-                maxRadius={maxRadius}
-                angleFor={angleFor}
-              />
+        {hasAnySelf &&
+          selfPoints.map((p) =>
+            p.x != null && p.y != null ? (
+              <circle key={`selfdot-${p.code}`} cx={p.x} cy={p.y} r={3.5} fill="#111827" />
             ) : null
           )}
-          {hasAnySelf &&
-            selfSegments.map((d, i) => (
-              <path key={`self-${i}`} d={d} fill="none" stroke="#111827" strokeWidth={2} />
-            ))}
-          {hasAnySelf &&
-            selfPoints.map((p) =>
-              p.x != null && p.y != null ? (
-                <circle key={`selfdot-${p.code}`} cx={p.x} cy={p.y} r={3.5} fill="#111827" />
-              ) : null
-            )}
-          {scaleTicks.map((tick) => (
-            <text
-              key={`scale-${tick.level}`}
-              x={tick.x}
-              y={tick.y}
-              fontSize={8.5}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fill="#9ca3af"
-            >
-              {tick.level}
-            </text>
-          ))}
-          {points.map((p) => (
-            <text
-              key={`label-${p.code}`}
-              x={p.labelX}
-              y={p.labelY}
-              fontSize={9.5}
-              textAnchor={
-                Math.abs(p.labelX - center) < 4 ? "middle" : p.labelX > center ? "start" : "end"
-              }
-              dominantBaseline="middle"
-              fill={p.color}
-            >
-              {p.name}
-            </text>
-          ))}
-        </svg>
+        {scaleTicks.map((tick) => (
+          <text
+            key={`scale-${tick.level}`}
+            x={tick.x}
+            y={tick.y}
+            fontSize={8.5}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#9ca3af"
+          >
+            {tick.level}
+          </text>
+        ))}
+        {points.map((p) => (
+          <text
+            key={`label-${p.code}`}
+            x={p.labelX}
+            y={p.labelY}
+            fontSize={9.5}
+            textAnchor={
+              Math.abs(p.labelX - center) < 4 ? "middle" : p.labelX > center ? "start" : "end"
+            }
+            dominantBaseline="middle"
+            fill={p.color}
+          >
+            {p.name}
+          </text>
+        ))}
+      </svg>
 
-        {!showQuadrants && (
-          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 mt-1">
-            {groupsPresent.map((code) => (
-              <span key={code} className="flex items-center gap-1.5">
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: GROUP_COLORS[code] || "#6b7280", opacity: 0.5 }}
-                />
-                {GROUP_LABELS[code] || code} (media)
-              </span>
-            ))}
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-900" /> Tú
+      {!showQuadrants && (
+        <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 mt-1">
+          {groupsPresent.map((code) => (
+            <span key={code} className="flex items-center gap-1.5">
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: GROUP_COLORS[code] || "#6b7280", opacity: 0.5 }}
+              />
+              {GROUP_LABELS[code] || code} (media)
             </span>
-          </div>
-        )}
-      </div>
-
-      <div className="w-full" style={{ order: order + 100 }}>
-        {categorySeries.length > 0 && (
-          <div className="mb-4">
-            <p className="text-xs text-gray-500 mb-2">
-              Ver también la media de un grupo concreto de evaluadores:
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {categorySeries.map((series) => {
-                const active = activeCategories.has(series.category);
-                const color = CATEGORY_COLORS[series.category] || "#6b7280";
-                return (
-                  <button
-                    key={series.category}
-                    type="button"
-                    onClick={() => toggleCategory(series.category)}
-                    className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors"
-                    style={
-                      active
-                        ? { borderColor: color, color, backgroundColor: `${color}14` }
-                        : { borderColor: "#d1d5db", color: "#6b7280" }
-                    }
-                  >
-                    <span
-                      className="inline-block w-2 h-2 rounded-full"
-                      style={{ backgroundColor: color }}
-                    />
-                    {EVALUATOR_CATEGORY_LABELS[series.category] || series.category}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <div className="w-full overflow-x-auto">
-          <table className="w-full text-xs border rounded overflow-hidden">
-            <thead>
-              <tr className="bg-gray-50 text-left text-gray-500">
-                <th className="px-3 py-2 font-medium">Competencia</th>
-                {tableColumns.map((col) => (
-                  <th key={col.key} className="px-3 py-2 font-medium text-right">
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {axes.map((axis) => (
-                <tr key={axis.code}>
-                  <td className="px-3 py-2">{axis.name}</td>
-                  {tableColumns.map((col) => {
-                    const value = col.getValue(axis);
-                    return (
-                      <td key={col.key} className="px-3 py-2 text-right text-gray-700">
-                        {value != null ? value.toFixed(1) : "—"}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          ))}
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-900" /> Tú
+          </span>
         </div>
+      )}
+
+      {categorySeries.length > 0 && (
+        <div className="mt-4 w-full">
+          <p className="text-xs text-gray-500 mb-2">
+            Ver también la media de un grupo concreto de evaluadores:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {categorySeries.map((series) => {
+              const active = activeCategories.has(series.category);
+              const color = CATEGORY_COLORS[series.category] || "#6b7280";
+              return (
+                <button
+                  key={series.category}
+                  type="button"
+                  onClick={() => toggleCategory(series.category)}
+                  className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors"
+                  style={
+                    active
+                      ? { borderColor: color, color, backgroundColor: `${color}14` }
+                      : { borderColor: "#d1d5db", color: "#6b7280" }
+                  }
+                >
+                  <span
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ backgroundColor: color }}
+                  />
+                  {EVALUATOR_CATEGORY_LABELS[series.category] || series.category}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 w-full overflow-x-auto">
+        <table className="w-full text-xs border rounded overflow-hidden">
+          <thead>
+            <tr className="bg-gray-50 text-left text-gray-500">
+              <th className="px-3 py-2 font-medium">Competencia</th>
+              {tableColumns.map((col) => (
+                <th key={col.key} className="px-3 py-2 font-medium text-right">
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {axes.map((axis) => (
+              <tr key={axis.code}>
+                <td className="px-3 py-2">{axis.name}</td>
+                {tableColumns.map((col) => {
+                  const value = col.getValue(axis);
+                  return (
+                    <td key={col.key} className="px-3 py-2 text-right text-gray-700">
+                      {value != null ? value.toFixed(1) : "—"}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </>
+    </div>
   );
 }
 

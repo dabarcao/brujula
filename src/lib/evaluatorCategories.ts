@@ -8,12 +8,11 @@ export const EVALUATOR_CATEGORY_LABELS: Record<string, string> = {
   other: "Otro",
 };
 
-// Vive aquí (módulo neutral, sin "use client") en vez de en
-// CompetencyComparisonChart, porque CompetencyBars — un Server
-// Component — también necesita importarla, y cruzar de un archivo
-// "use client" a un Server Component para una simple constante no
-// resuelve de forma fiable (se vio en pruebas reales: los puntos de
-// grupo salían todos en gris, el color nunca llegaba).
+// Vive aquí (módulo neutral, sin "use client") y no dentro de
+// CompetencyComparisonChart — cruzar de un archivo "use client" a un
+// Server Component para importar una simple constante no resuelve de
+// forma fiable (se vio en pruebas reales con un componente que
+// necesitaba estos colores desde el servidor: salían todos en gris).
 export const EVALUATOR_CATEGORY_COLORS: Record<string, string> = {
   manager: "#7c3aed",
   team: "#0891b2",

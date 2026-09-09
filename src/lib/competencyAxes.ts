@@ -50,16 +50,6 @@ export function buildCompetencyAxes(
     .sort((a, b) => a.rolePosition - b.rolePosition || a.name.localeCompare(b.name));
 }
 
-// Plenitud no vive dentro de ningún rol VACC — se dibuja como un
-// mini-radar aparte, no mezclada en el mismo círculo (sección 9 del
-// spec, "Opción A" acordada para el mapa de competencias).
-export function splitVaccAndPlenitud(axes: CompetencyAxis[]) {
-  return {
-    vacc: axes.filter((axis) => axis.roleCode),
-    plenitud: axes.filter((axis) => !axis.roleCode),
-  };
-}
-
 export function computeGroupAverages(axes: CompetencyAxis[]) {
   const byGroup = new Map<string, { name: string; position: number; values: number[] }>();
   for (const axis of axes) {

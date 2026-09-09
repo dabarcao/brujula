@@ -9,7 +9,6 @@ import {
 } from "@/app/actions/feedback";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
 import CompetencyComparisonChart from "@/components/CompetencyComparisonChart";
-import CompetencyBars from "@/components/CompetencyBars";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -162,8 +161,6 @@ function CompetencyComparison({
     peerAvgValue: row.peer_avg_value,
     selfValue: row.self_value,
   }));
-  const vaccAxes = axes.filter((axis) => axis.groupCode !== "plenitud");
-  const plenitudAxes = axes.filter((axis) => axis.groupCode === "plenitud");
 
   const byCategory = new Map<string, Record<string, number>>();
   for (const row of byCategoryRows) {
@@ -178,28 +175,8 @@ function CompetencyComparison({
   }));
 
   return (
-    <div className="mb-8 flex flex-wrap items-start gap-x-8 gap-y-2">
-      {vaccAxes.length > 0 && (
-        <CompetencyComparisonChart
-          axes={vaccAxes}
-          categorySeries={categorySeries}
-          order={0}
-          size={400}
-        />
-      )}
-      {plenitudAxes.length > 0 && (
-        <CompetencyBars
-          axes={plenitudAxes.map((axis) => ({
-            code: axis.code,
-            name: axis.name,
-            avgValue: axis.peerAvgValue,
-            selfValue: axis.selfValue,
-          }))}
-          categorySeries={categorySeries}
-          order={1}
-          caption="Plenitud — no vive dentro de ningún rol, se ve aparte"
-        />
-      )}
+    <div className="mb-8">
+      <CompetencyComparisonChart axes={axes} categorySeries={categorySeries} />
     </div>
   );
 }

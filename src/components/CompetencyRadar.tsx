@@ -2,17 +2,18 @@
 // geometría fija de N ejes conocidos, no justifica una dependencia nueva).
 // Server Component — no necesita "use client", no hay interactividad.
 //
-// Un mismo componente sirve tanto para el radar grande de los 4 roles
-// VACC (12 ejes) como para el mini-radar de Plenitud (3 ejes) — Plenitud
-// no vive dentro de ningún rol (docs/modelo_roles_vacc.md), así que se
-// dibuja aparte en vez de mezclada en el mismo círculo ("Opción A").
+// Un único radar de 15 ejes / 5 sectores (los 4 roles VACC + Plenitud),
+// en vez de dos gráficos separados — se probó Plenitud aparte (mini-radar,
+// luego barras) y complicaba más de lo que aportaba. Plenitud se centra
+// arriba del todo (36° a cada lado de las 12:00), y los 4 roles reparten
+// el resto en sentido horario — así sigue leyéndose como "lo primero
+// que ves", sin la complejidad de dibujarla en un sitio aparte
+// (docs/modelo_roles_vacc.md).
 
 type Axis = {
   code: string;
   name: string;
-  // Rol VACC (visionario/arquitecto/catalizador/coach) para el radar
-  // grande, o "plenitud" para el mini-radar — un solo grupo, un solo
-  // color, sin necesidad de leyenda con 5 entradas a la vez.
+  // Rol VACC (visionario/arquitecto/catalizador/coach) o "plenitud".
   groupCode: string;
   avgValue: number | null;
   // Autoevaluación del propio empleado — solo se rellena en el
@@ -22,6 +23,7 @@ type Axis = {
 };
 
 export const GROUP_COLORS: Record<string, string> = {
+  plenitud: "#dc2626",
   visionario: "#2563eb",
   arquitecto: "#059669",
   catalizador: "#ea580c",
@@ -30,17 +32,19 @@ export const GROUP_COLORS: Record<string, string> = {
   // ve en el mismo gráfico. Verde-lima: distinto del azul de Visionario
   // y del ámbar que ya usa "Compañero de la empresa".
   coach: "#65a30d",
-  plenitud: "#dc2626",
 };
 
 const DEFAULT_COLOR = "#6b7280";
 
+// Plenitud va primero a propósito: es el grupo que se centra arriba del
+// todo (ver angleFor) — el resto sigue este mismo orden en sentido
+// horario desde ahí.
 export const GROUP_ORDER: Record<string, number> = {
-  visionario: 0,
-  arquitecto: 1,
-  catalizador: 2,
-  coach: 3,
-  plenitud: 4,
+  plenitud: 0,
+  visionario: 1,
+  arquitecto: 2,
+  catalizador: 3,
+  coach: 4,
 };
 
 export const GROUP_LABELS: Record<string, string> = {
@@ -57,8 +61,6 @@ export default function CompetencyRadar({
   caption,
 }: {
   axes: Axis[];
-  // Más pequeño para el mini-radar de Plenitud, que solo tiene 3 ejes y
-  // se dibuja junto al grande, no a su mismo tamaño.
   size?: number;
   caption?: string;
 }) {
@@ -77,10 +79,6 @@ export default function CompetencyRadar({
   // desajuste de hidratación. Redondear absorbe esa diferencia.
   const round = (num: number) => Math.round(num * 100) / 100;
 
-  // Solo los grupos que de verdad están representados en estos ejes —
-  // así el mini-radar de Plenitud no arrastra una leyenda ni un tinte de
-  // cuadrante para los 4 roles que no dibuja (solo tiene sentido marcar
-  // cuadrantes cuando hay más de un grupo).
   const groupsPresent = Array.from(new Set(axes.map((a) => a.groupCode))).sort(
     (a, b) => (GROUP_ORDER[a] ?? 99) - (GROUP_ORDER[b] ?? 99)
   );
@@ -90,13 +88,16 @@ export default function CompetencyRadar({
   // Con etiqueta de rol por cuadrante hace falta algo más de margen que
   // con solo las etiquetas de competencia.
   const maxRadius = center - (showQuadrants ? 100 : 90);
-
   const halfWidth = Math.PI / n;
-  // Girado medio hueco respecto al cálculo ingenuo: así el límite entre
-  // el último grupo y el primero cae justo en las 12:00 (arriba del
-  // todo), en vez de que el primer EJE se siente ahí y su cuadrante se
-  // reparta medio hueco a cada lado de esa línea.
-  const angleFor = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2 + halfWidth;
+
+  // Centra el PRIMER grupo (Plenitud) arriba del todo, en vez de dejar
+  // que caiga donde toque en la rotación ingenua — con 3 ejes por grupo,
+  // el eje central de Plenitud (índice 1) queda exactamente a las 12:00,
+  // y su gajo entero reparte 36° a cada lado (grupo de tamaño 3 ×
+  // 24°/eje ÷ 2 = 36°), tal cual se pidió.
+  const firstGroupSize = axes.filter((a) => a.groupCode === axes[0]?.groupCode).length;
+  const centerIndex = (firstGroupSize - 1) / 2;
+  const angleFor = (i: number) => ((Math.PI * 2) / n) * (i - centerIndex) - Math.PI / 2;
 
   const points = axes.map((axis, i) => {
     const angle = angleFor(i);
@@ -127,9 +128,7 @@ export default function CompetencyRadar({
   });
 
   // Un gajo de fondo por rol, del centro hasta el borde — deja claro a
-  // qué cuadrante pertenece cada competencia sin tener que leer la
-  // leyenda de abajo. Solo con más de un grupo (nunca en el mini-radar
-  // de Plenitud, que es un único grupo).
+  // qué sector pertenece cada competencia sin tener que leer la leyenda.
   const quadrants: { code: string; d: string; labelX: number; labelY: number }[] = [];
   if (showQuadrants) {
     let runStart = 0;
