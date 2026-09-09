@@ -1,20 +1,28 @@
 "use client";
 
 import { useState } from "react";
+import ScaleSlider from "@/components/ScaleSlider";
 
 type CompetencyOption = {
   code: string;
   name: string;
 };
 
+type ScaleLevel = {
+  level: number;
+  label: string;
+};
+
 export default function CompetencyPicker({
   questionId,
   competencies,
   maxSelections,
+  scaleLevels,
 }: {
   questionId: string;
   competencies: CompetencyOption[];
   maxSelections: number;
+  scaleLevels: ScaleLevel[];
 }) {
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -70,19 +78,7 @@ export default function CompetencyPicker({
           <div key={code} className="border rounded p-3 flex flex-col gap-2">
             <input type="hidden" name={`competency_${questionId}`} value={code} />
             <p className="text-sm font-medium">{competency?.name}</p>
-            <div className="flex gap-2">
-              {[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map((level) => (
-                <label key={level} className="flex flex-col items-center gap-1 text-xs text-gray-600">
-                  <input
-                    type="radio"
-                    name={`competency_value_${questionId}_${code}`}
-                    value={level}
-                    required
-                  />
-                  {level}
-                </label>
-              ))}
-            </div>
+            <ScaleSlider name={`competency_value_${questionId}_${code}`} levels={scaleLevels} />
             <textarea
               name={`competency_text_${questionId}_${code}`}
               rows={2}
