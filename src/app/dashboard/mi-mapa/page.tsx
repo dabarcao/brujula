@@ -93,16 +93,13 @@ export default async function MiMapaDeCompetenciasPage() {
             ))}
           </div>
 
-          <div className="flex flex-col items-center gap-10">
-            <div className="flex justify-center w-full">
-              <CompetencyRadar axes={toRadarAxes(vacc)} />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-2 text-center">
-                Plenitud — no vive dentro de ningún rol, se ve aparte
-              </p>
-              <CompetencyRadar axes={toRadarAxes(plenitud)} />
-            </div>
+          <div className="flex flex-wrap justify-center items-start gap-8">
+            <CompetencyRadar axes={toRadarAxes(vacc)} size={380} />
+            <CompetencyRadar
+              axes={toRadarAxes(plenitud)}
+              size={180}
+              caption="Plenitud — no vive dentro de ningún rol, se ve aparte"
+            />
           </div>
         </>
       )}

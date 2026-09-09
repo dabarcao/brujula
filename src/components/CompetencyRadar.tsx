@@ -26,7 +26,7 @@ export const GROUP_COLORS: Record<string, string> = {
   arquitecto: "#059669",
   catalizador: "#ea580c",
   coach: "#7c3aed",
-  plenitud: "#6b7280",
+  plenitud: "#dc2626",
 };
 
 const DEFAULT_COLOR = "#6b7280";
@@ -47,7 +47,17 @@ export const GROUP_LABELS: Record<string, string> = {
   plenitud: "Plenitud",
 };
 
-export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
+export default function CompetencyRadar({
+  axes: rawAxes,
+  size = 440,
+  caption,
+}: {
+  axes: Axis[];
+  // Más pequeño para el mini-radar de Plenitud, que solo tiene 3 ejes y
+  // se dibuja junto al grande, no a su mismo tamaño.
+  size?: number;
+  caption?: string;
+}) {
   // Los ejes siempre se agrupan por rol antes de dibujarlos, sin
   // importar en qué orden lleguen desde la consulta — si no, los colores
   // de cada grupo salen intercalados alrededor del círculo en vez de en
@@ -55,12 +65,34 @@ export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
   const axes = [...rawAxes].sort(
     (a, b) => (GROUP_ORDER[a.groupCode] ?? 99) - (GROUP_ORDER[b.groupCode] ?? 99)
   );
-  const size = 440;
-  const center = size / 2;
-  const maxRadius = center - 90;
   const n = axes.length;
+  // Redondeado a 2 decimales: Math.cos/Math.sin pueden dar un último
+  // dígito distinto entre el render de servidor y el del navegador (el
+  // mismo cálculo, pero motores JS distintos) — con 15 decimales de
+  // precisión en el string, eso ya basta para que React marque un
+  // desajuste de hidratación. Redondear absorbe esa diferencia.
+  const round = (num: number) => Math.round(num * 100) / 100;
 
-  const angleFor = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2;
+  // Solo los grupos que de verdad están representados en estos ejes —
+  // así el mini-radar de Plenitud no arrastra una leyenda ni un tinte de
+  // cuadrante para los 4 roles que no dibuja (solo tiene sentido marcar
+  // cuadrantes cuando hay más de un grupo).
+  const groupsPresent = Array.from(new Set(axes.map((a) => a.groupCode))).sort(
+    (a, b) => (GROUP_ORDER[a] ?? 99) - (GROUP_ORDER[b] ?? 99)
+  );
+  const showQuadrants = groupsPresent.length > 1;
+
+  const center = size / 2;
+  // Con etiqueta de rol por cuadrante hace falta algo más de margen que
+  // con solo las etiquetas de competencia.
+  const maxRadius = center - (showQuadrants ? 100 : 90);
+
+  const halfWidth = Math.PI / n;
+  // Girado medio hueco respecto al cálculo ingenuo: así el límite entre
+  // el último grupo y el primero cae justo en las 12:00 (arriba del
+  // todo), en vez de que el primer EJE se siente ahí y su cuadrante se
+  // reparta medio hueco a cada lado de esa línea.
+  const angleFor = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2 + halfWidth;
 
   const points = axes.map((axis, i) => {
     const angle = angleFor(i);
@@ -70,12 +102,12 @@ export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
     return {
       ...axis,
       color,
-      axisX: center + Math.cos(angle) * maxRadius,
-      axisY: center + Math.sin(angle) * maxRadius,
-      labelX: center + Math.cos(angle) * (maxRadius + 16),
-      labelY: center + Math.sin(angle) * (maxRadius + 16),
-      dataX: dataRadius != null ? center + Math.cos(angle) * dataRadius : null,
-      dataY: dataRadius != null ? center + Math.sin(angle) * dataRadius : null,
+      axisX: round(center + Math.cos(angle) * maxRadius),
+      axisY: round(center + Math.sin(angle) * maxRadius),
+      labelX: round(center + Math.cos(angle) * (maxRadius + 16)),
+      labelY: round(center + Math.sin(angle) * (maxRadius + 16)),
+      dataX: dataRadius != null ? round(center + Math.cos(angle) * dataRadius) : null,
+      dataY: dataRadius != null ? round(center + Math.sin(angle) * dataRadius) : null,
     };
   });
 
@@ -84,11 +116,40 @@ export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
     const ringPoints = axes
       .map((_, i) => {
         const angle = angleFor(i);
-        return `${center + Math.cos(angle) * r},${center + Math.sin(angle) * r}`;
+        return `${round(center + Math.cos(angle) * r)},${round(center + Math.sin(angle) * r)}`;
       })
       .join(" ");
     return { level, ringPoints };
   });
+
+  // Un gajo de fondo por rol, del centro hasta el borde — deja claro a
+  // qué cuadrante pertenece cada competencia sin tener que leer la
+  // leyenda de abajo. Solo con más de un grupo (nunca en el mini-radar
+  // de Plenitud, que es un único grupo).
+  const quadrants: { code: string; d: string; labelX: number; labelY: number }[] = [];
+  if (showQuadrants) {
+    let runStart = 0;
+    for (let i = 1; i <= n; i++) {
+      const code = axes[i % n]?.groupCode;
+      if (i === n || code !== axes[runStart].groupCode) {
+        const startAngle = angleFor(runStart) - halfWidth;
+        const endAngle = angleFor(i - 1) + halfWidth;
+        const midAngle = (startAngle + endAngle) / 2;
+        const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
+        const p1x = round(center + Math.cos(startAngle) * maxRadius);
+        const p1y = round(center + Math.sin(startAngle) * maxRadius);
+        const p2x = round(center + Math.cos(endAngle) * maxRadius);
+        const p2y = round(center + Math.sin(endAngle) * maxRadius);
+        quadrants.push({
+          code: axes[runStart].groupCode,
+          d: `M ${center} ${center} L ${p1x} ${p1y} A ${maxRadius} ${maxRadius} 0 ${largeArc} 1 ${p2x} ${p2y} Z`,
+          labelX: round(center + Math.cos(midAngle) * (maxRadius + 44)),
+          labelY: round(center + Math.sin(midAngle) * (maxRadius + 44)),
+        });
+        runStart = i;
+      }
+    }
+  }
 
   const segments: { d: string; color: string }[] = [];
   for (let i = 0; i < n; i++) {
@@ -109,8 +170,8 @@ export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
     const r = hasValue ? maxRadius * ((axis.selfValue as number) / 5) : null;
     return {
       code: axis.code,
-      x: r != null ? center + Math.cos(angle) * r : null,
-      y: r != null ? center + Math.sin(angle) * r : null,
+      x: r != null ? round(center + Math.cos(angle) * r) : null,
+      y: r != null ? round(center + Math.sin(angle) * r) : null,
     };
   });
   const selfSegments: string[] = [];
@@ -122,16 +183,13 @@ export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
     }
   }
 
-  // Solo los grupos que de verdad están representados en estos ejes —
-  // así el mini-radar de Plenitud no arrastra una leyenda con los 4
-  // roles que no dibuja.
-  const groupsPresent = Array.from(new Set(axes.map((a) => a.groupCode))).sort(
-    (a, b) => (GROUP_ORDER[a] ?? 99) - (GROUP_ORDER[b] ?? 99)
-  );
-
   return (
-    <div className="flex flex-col items-center">
-      <svg viewBox={`0 0 ${size} ${size}`} width="100%" style={{ maxWidth: 480 }}>
+    <div className="flex flex-col items-center" style={{ width: "100%", maxWidth: size }}>
+      {caption && <p className="text-xs text-gray-500 mb-2 text-center">{caption}</p>}
+      <svg viewBox={`0 0 ${size} ${size}`} width="100%" style={{ maxWidth: size }}>
+        {quadrants.map((q) => (
+          <path key={`quadrant-${q.code}`} d={q.d} fill={GROUP_COLORS[q.code] || DEFAULT_COLOR} opacity={0.07} />
+        ))}
         {rings.map((ring) => (
           <polygon
             key={ring.level}
@@ -185,18 +243,36 @@ export default function CompetencyRadar({ axes: rawAxes }: { axes: Axis[] }) {
             {p.name}
           </text>
         ))}
-      </svg>
-      <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 mt-1">
-        {groupsPresent.map((code) => (
-          <span key={code} className="flex items-center gap-1.5">
-            <span
-              className="inline-block w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: GROUP_COLORS[code] || DEFAULT_COLOR }}
-            />
-            {GROUP_LABELS[code] || code}
-          </span>
+        {quadrants.map((q) => (
+          <text
+            key={`quadrant-label-${q.code}`}
+            x={q.labelX}
+            y={q.labelY}
+            fontSize={12}
+            fontWeight={600}
+            textAnchor={
+              Math.abs(q.labelX - center) < 4 ? "middle" : q.labelX > center ? "start" : "end"
+            }
+            dominantBaseline="middle"
+            fill={GROUP_COLORS[q.code] || DEFAULT_COLOR}
+          >
+            {GROUP_LABELS[q.code] || q.code}
+          </text>
         ))}
-      </div>
+      </svg>
+      {!showQuadrants && (
+        <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 mt-1">
+          {groupsPresent.map((code) => (
+            <span key={code} className="flex items-center gap-1.5">
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: GROUP_COLORS[code] || DEFAULT_COLOR }}
+              />
+              {GROUP_LABELS[code] || code}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

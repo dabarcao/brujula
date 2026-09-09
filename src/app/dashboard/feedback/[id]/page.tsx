@@ -177,17 +177,23 @@ function CompetencyComparison({
   }));
 
   return (
-    <div className="mb-8 flex flex-col gap-10">
+    <div className="mb-8 flex flex-wrap items-start gap-x-8 gap-y-2">
       {vaccAxes.length > 0 && (
-        <CompetencyComparisonChart axes={vaccAxes} categorySeries={categorySeries} />
+        <CompetencyComparisonChart
+          axes={vaccAxes}
+          categorySeries={categorySeries}
+          order={0}
+          size={380}
+        />
       )}
       {plenitudAxes.length > 0 && (
-        <div>
-          <p className="text-xs text-gray-500 mb-2 text-center">
-            Plenitud — no vive dentro de ningún rol, se ve aparte
-          </p>
-          <CompetencyComparisonChart axes={plenitudAxes} categorySeries={categorySeries} />
-        </div>
+        <CompetencyComparisonChart
+          axes={plenitudAxes}
+          categorySeries={categorySeries}
+          order={1}
+          size={180}
+          caption="Plenitud — no vive dentro de ningún rol, se ve aparte"
+        />
       )}
     </div>
   );
