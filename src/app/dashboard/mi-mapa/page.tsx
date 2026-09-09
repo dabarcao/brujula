@@ -2,11 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CompetencyRadar from "@/components/CompetencyRadar";
-import {
-  buildCompetencyAxes,
-  computeGroupAverages,
-  type FrameworkRow,
-} from "@/lib/competencyAxes";
+import { buildCompetencyAxes, type FrameworkRow } from "@/lib/competencyAxes";
 
 type SummaryRow = {
   competency_code: string;
@@ -51,7 +47,6 @@ export default async function MiMapaDeCompetenciasPage() {
 
   const axes = buildCompetencyAxes(frameworks, avgByCode);
   const hasAnyData = axes.some((axis) => axis.avgValue != null);
-  const groupCards = computeGroupAverages(axes);
   const radarAxes = axes.map((a) => ({
     code: a.code,
     name: a.name,
@@ -80,15 +75,6 @@ export default async function MiMapaDeCompetenciasPage() {
             Junta todo el feedback que has recibido (ágil y de ciclos 360) que
             ya se ha revelado, sin contar tu autoevaluación.
           </p>
-
-          <div className="grid grid-cols-3 gap-3 mb-8">
-            {groupCards.map((card) => (
-              <div key={card.code} className="border rounded p-4 text-center">
-                <p className="text-xs text-gray-500 mb-1">{card.name}</p>
-                <p className="text-2xl font-semibold">{card.average.toFixed(1)}</p>
-              </div>
-            ))}
-          </div>
 
           <div className="flex justify-center">
             <CompetencyRadar axes={radarAxes} />

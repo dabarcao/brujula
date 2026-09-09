@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/feedback";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
 import CompetencyComparisonChart from "@/components/CompetencyComparisonChart";
+import { GROUP_COLORS, GROUP_LABELS } from "@/components/CompetencyRadar";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -71,48 +72,83 @@ function QuestionGroupList({ groups }: { groups: QuestionGroup[] }) {
   );
 }
 
-type CompetencySummaryRow = {
+type CompetencyNarrativeRow = {
+  question_position: number;
+  question_prompt: string;
   competency_code: string;
   competency_name: string | null;
+  role_code: string | null;
+  mention_count: number;
   avg_value: number;
-  response_count: number;
-  percentile_empresa: number | null;
-  percentile_global: number | null;
+  comments: string[] | null;
 };
 
-function CompetencySummaryTable({ rows }: { rows: CompetencySummaryRow[] }) {
+// Las 3 preguntas de la plantilla ad_hoc_competencias (migración 0026) son
+// fijas, siempre en este orden — de ahí un titular narrativo por posición
+// en vez de mostrar el texto literal de la pregunta. Si algún día hay más
+// preguntas de tipo "competency" con otro propósito, se cae al prompt tal
+// cual en vez de romper.
+const NARRATIVE_HEADLINES: Record<number, string> = {
+  1: "Tus compañeros dicen que destacas en:",
+  2: "Un desafío para ti sería:",
+  3: "Algo que a los demás les gustaría ver más de ti es:",
+};
+
+function CompetencyNarrativeReport({ rows }: { rows: CompetencyNarrativeRow[] }) {
   if (rows.length === 0) return null;
+
+  const byQuestion = new Map<number, { prompt: string; rows: CompetencyNarrativeRow[] }>();
+  for (const row of rows) {
+    if (!byQuestion.has(row.question_position)) {
+      byQuestion.set(row.question_position, { prompt: row.question_prompt, rows: [] });
+    }
+    byQuestion.get(row.question_position)!.rows.push(row);
+  }
+  const questions = Array.from(byQuestion.entries()).sort((a, b) => a[0] - b[0]);
+
   return (
-    <div className="mb-8">
-      <table className="w-full text-sm border rounded overflow-hidden">
-        <thead>
-          <tr className="bg-gray-50 text-left text-xs text-gray-500">
-            <th className="px-4 py-2 font-medium">Competencia</th>
-            <th className="px-4 py-2 font-medium">Nota media</th>
-            <th className="px-4 py-2 font-medium">Percentil empresa</th>
-            <th className="px-4 py-2 font-medium">Percentil global</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {rows.map((row) => (
-            <tr key={row.competency_code}>
-              <td className="px-4 py-2">{row.competency_name || row.competency_code}</td>
-              <td className="px-4 py-2">{row.avg_value} / 5</td>
-              <td className="px-4 py-2 text-gray-500">
-                {row.percentile_empresa != null ? `${row.percentile_empresa}%` : "—"}
-              </td>
-              <td className="px-4 py-2 text-gray-500">
-                {row.percentile_global != null ? `${row.percentile_global}%` : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="text-xs text-gray-400 mt-2">
-        El percentil global todavía no es fiable — hay muy pocos datos en la
-        plataforma para compararse de verdad. Se muestran igualmente para
-        tener el mecanismo listo cuando haya más volumen.
-      </p>
+    <div className="mb-8 flex flex-col gap-8">
+      {questions.map(([position, { prompt, rows: qRows }]) => (
+        <div key={position}>
+          <p className="text-base font-semibold mb-3">
+            {NARRATIVE_HEADLINES[position] || prompt}
+          </p>
+          <div className="flex flex-col divide-y">
+            {qRows.map((row) => {
+              const groupCode = row.role_code || "plenitud";
+              const color = GROUP_COLORS[groupCode] || "#6b7280";
+              const dimension = GROUP_LABELS[groupCode] || groupCode;
+              return (
+                <div key={row.competency_code} className="pt-4 first:pt-0 pb-4 last:pb-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold flex items-center gap-2">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: color }}
+                      />
+                      {row.competency_name || row.competency_code}
+                      <span className="text-gray-400 font-normal">({dimension})</span>
+                    </p>
+                    <span className="text-xs text-gray-400 shrink-0">
+                      {row.mention_count === 1 ? "1 mención" : `${row.mention_count} menciones`}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">Nota media {row.avg_value} / 5</p>
+                  {row.comments && row.comments.length > 0 && (
+                    <ul className="flex flex-col gap-1.5 mt-2.5">
+                      {row.comments.map((comment, i) => (
+                        <li key={i} className="text-sm text-gray-700 pl-3" style={{ borderLeft: `2px solid ${color}` }}>
+                          {comment}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -214,7 +250,9 @@ export default async function FeedbackRequestPage({
 
   const { data: request } = await supabase
     .from("feedback_requests")
-    .select("id, created_at, requester_member_id, request_type, status, closes_at")
+    .select(
+      "id, created_at, requester_member_id, request_type, status, closes_at, name, feedback_cycles(name)"
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -261,11 +299,19 @@ export default async function FeedbackRequestPage({
   const peerGroups = revealed ? await loadQuestionGroups(supabase, id, false) : [];
 
   const isCycle = request.request_type === "cycle";
+  const cycleName = (request.feedback_cycles as unknown as { name: string } | null)?.name;
+  // "Ciclo 360 " / "Feedback ágil " es siempre el prefijo — la persona
+  // solo escribe lo que sigue (ver el label de cada formulario de
+  // creación, que ya deja esto claro para no duplicar palabras).
+  const fallbackDate = `del ${new Date(request.created_at).toLocaleDateString("es-ES")}`;
+  const requestLabel = isCycle
+    ? `Ciclo 360 ${cycleName || request.name || fallbackDate}`
+    : `Feedback ágil ${request.name || fallbackDate}`;
 
-  const { data: competencySummaryData } = revealed && !isCycle
-    ? await supabase.rpc("get_request_competency_summary", { p_request_id: id })
+  const { data: competencyNarrativeData } = revealed && !isCycle
+    ? await supabase.rpc("get_request_competency_narrative", { p_request_id: id })
     : { data: null };
-  const competencySummary = (competencySummaryData as CompetencySummaryRow[] | null) || [];
+  const competencyNarrative = (competencyNarrativeData as CompetencyNarrativeRow[] | null) || [];
 
   const { data: competencyComparisonData } = revealed && isCycle
     ? await supabase.rpc("get_request_competency_comparison", { p_request_id: id })
@@ -319,9 +365,7 @@ export default async function FeedbackRequestPage({
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">
-          Solicitud del {new Date(request.created_at).toLocaleDateString("es-ES")}
-        </h1>
+        <h1 className="text-2xl font-semibold">{requestLabel}</h1>
         <Link href="/dashboard" className="text-sm underline text-gray-600">
           Volver al panel
         </Link>
@@ -439,7 +483,7 @@ export default async function FeedbackRequestPage({
             {isCycle ? (
               <CompetencyComparison rows={competencyComparison} byCategoryRows={competencyByCategory} />
             ) : (
-              <CompetencySummaryTable rows={competencySummary} />
+              <CompetencyNarrativeReport rows={competencyNarrative} />
             )}
             <QuestionGroupList groups={peerGroups} />
           </>

@@ -88,7 +88,7 @@ export default async function CyclePage({
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">{cycle.name}</h1>
+        <h1 className="text-2xl font-semibold">Ciclo 360 {cycle.name}</h1>
         <Link href="/dashboard" className="text-sm underline text-gray-600">
           Volver al panel
         </Link>

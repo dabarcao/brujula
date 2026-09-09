@@ -96,9 +96,14 @@ export default async function RespondPage({
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
-      <h1 className="text-2xl font-semibold mb-1">
-        {isSelf ? "Tu autoevaluación" : "Dar feedback"}
-      </h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-semibold">
+          {isSelf ? "Tu autoevaluación" : "Dar feedback"}
+        </h1>
+        <Link href="/dashboard" className="text-sm underline text-gray-600">
+          Volver al panel
+        </Link>
+      </div>
       <p className="text-sm text-gray-600 mb-6">
         {isSelf
           ? "Esta es tu propia valoración: no es anónima, es tu punto de vista."

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { GROUP_COLORS, GROUP_LABELS, GROUP_ORDER } from "@/components/CompetencyRadar";
 import {
   EVALUATOR_CATEGORY_LABELS,
@@ -184,6 +184,20 @@ export default function CompetencyComparisonChart({
     });
   }
 
+  // La tabla ya recibe `axes` ordenado por grupo (línea 39) — aquí solo
+  // se detectan los tramos contiguos para meter una fila de cabecera
+  // (nombre + color del rol) antes de cada bloque, igual que ya se hace
+  // con los gajos de fondo del propio SVG.
+  const tableRowGroups: { groupCode: string; rows: typeof axes }[] = [];
+  for (const axis of axes) {
+    const last = tableRowGroups[tableRowGroups.length - 1];
+    if (last && last.groupCode === axis.groupCode) {
+      last.rows.push(axis);
+    } else {
+      tableRowGroups.push({ groupCode: axis.groupCode, rows: [axis] });
+    }
+  }
+
   const toggleCategory = (category: string) => {
     setActiveCategories((prev) => {
       const next = new Set(prev);
@@ -360,19 +374,35 @@ export default function CompetencyComparisonChart({
             </tr>
           </thead>
           <tbody className="divide-y">
-            {axes.map((axis) => (
-              <tr key={axis.code}>
-                <td className="px-3 py-2">{axis.name}</td>
-                {tableColumns.map((col) => {
-                  const value = col.getValue(axis);
-                  return (
-                    <td key={col.key} className="px-3 py-2 text-right text-gray-700">
-                      {value != null ? value.toFixed(1) : "—"}
+            {tableRowGroups.map((group) => {
+              const color = GROUP_COLORS[group.groupCode] || "#6b7280";
+              return (
+                <Fragment key={group.groupCode}>
+                  <tr>
+                    <td
+                      colSpan={1 + tableColumns.length}
+                      className="px-3 py-1.5 text-xs font-semibold"
+                      style={{ backgroundColor: `${color}14`, color }}
+                    >
+                      {GROUP_LABELS[group.groupCode] || group.groupCode}
                     </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  </tr>
+                  {group.rows.map((axis) => (
+                    <tr key={axis.code}>
+                      <td className="px-3 py-2">{axis.name}</td>
+                      {tableColumns.map((col) => {
+                        const value = col.getValue(axis);
+                        return (
+                          <td key={col.key} className="px-3 py-2 text-right text-gray-700">
+                            {value != null ? value.toFixed(1) : "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

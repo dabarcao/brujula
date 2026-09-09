@@ -13,9 +13,13 @@ export const EVALUATOR_CATEGORY_LABELS: Record<string, string> = {
 // Server Component para importar una simple constante no resuelve de
 // forma fiable (se vio en pruebas reales con un componente que
 // necesitaba estos colores desde el servidor: salían todos en gris).
+//
+// Un solo tono (violeta), de más oscuro a más claro — antes eran 4
+// colores de familias distintas, que competían visualmente con los 5
+// colores de GROUP_COLORS en el mismo gráfico.
 export const EVALUATOR_CATEGORY_COLORS: Record<string, string> = {
-  manager: "#7c3aed",
-  team: "#0891b2",
-  organization: "#ca8a04",
-  other: "#db2777",
+  manager: "#4c1d95", // violeta más oscuro
+  team: "#7c3aed",
+  organization: "#a78bfa",
+  other: "#ddd6fe", // violeta más claro
 };

@@ -11,17 +11,6 @@ type ColleagueRow = {
   full_name: string | null;
 };
 
-// "Por competencias" primero y sin atenuar: es la única con un informe
-// real construido (nota media + percentil). Las demás solo listan
-// respuestas de texto en crudo, sin análisis — se muestran atenuadas.
-const SUBTYPE_LABELS: Record<string, string> = {
-  competencias: "Por competencias",
-  general: "General / desarrollo profesional",
-  meeting: "Reunión / presentación",
-  collaboration: "Colaboración",
-  leadership_initiative: "Liderazgo de una iniciativa",
-};
-
 export default async function NewFeedbackRequestPage({
   searchParams,
 }: {
@@ -113,14 +102,9 @@ export default async function NewFeedbackRequestPage({
         )}
 
         <form action={createFeedbackRequestForIndividual} className="flex flex-col gap-4">
+          <NameField />
           <SubtypeFieldset />
           <EmailEvaluatorPicker fieldName="inviteeEmails" minEmails={minInvitees} />
-          <button
-            type="submit"
-            className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800 self-start"
-          >
-            Enviar solicitud
-          </button>
         </form>
       </main>
     );
@@ -163,6 +147,7 @@ export default async function NewFeedbackRequestPage({
         </p>
       ) : (
         <form action={createFeedbackRequest} className="flex flex-col gap-4">
+          <NameField />
           <SubtypeFieldset />
           <EvaluatorPicker
             colleagues={colleagues as ColleagueRow[]}
@@ -177,28 +162,46 @@ export default async function NewFeedbackRequestPage({
   );
 }
 
+function NameField() {
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      Nombre para identificar este feedback (se mostrará como &ldquo;Feedback
+      ágil {"{tu nombre}"}&rdquo;)
+      <input
+        name="name"
+        type="text"
+        required
+        placeholder="Competencias — Q1"
+        className="border rounded px-3 py-2"
+      />
+    </label>
+  );
+}
+
+// Solo "Por competencias" es un flujo real hoy (el único con informe
+// construido — sección 5.2/17 del spec). Reconocimiento y Feedback
+// periódico son ideas ya registradas (spec.md secciones 14/15/17)
+// todavía sin construir — se dejan visibles pero deshabilitadas para que
+// el roadmap se vea en la propia pantalla, en vez de mostrar subtipos
+// viejos (general/reunión/colaboración/iniciativa) que nunca se llegaron
+// a construir del todo y no tenían ningún plan real detrás.
 function SubtypeFieldset() {
   return (
     <fieldset className="border rounded p-4">
       <legend className="text-sm font-medium px-1">¿Sobre qué es el feedback?</legend>
       <div className="flex flex-col gap-2 mt-2">
-        {Object.entries(SUBTYPE_LABELS).map(([value, label]) => (
-          <label
-            key={value}
-            className={
-              "flex items-center gap-2 text-sm" +
-              (value === "competencias" ? "" : " text-gray-400")
-            }
-          >
-            <input
-              type="radio"
-              name="subtype"
-              value={value}
-              defaultChecked={value === "competencias"}
-            />
-            {label}
-          </label>
-        ))}
+        <label className="flex items-center gap-2 text-sm">
+          <input type="radio" name="subtype" value="competencias" defaultChecked />
+          Por competencias
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-400 cursor-not-allowed">
+          <input type="radio" disabled />
+          Reconocimiento <span className="text-xs">(en construcción)</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-400 cursor-not-allowed">
+          <input type="radio" disabled />
+          Feedback periódico <span className="text-xs">(en construcción)</span>
+        </label>
       </div>
     </fieldset>
   );

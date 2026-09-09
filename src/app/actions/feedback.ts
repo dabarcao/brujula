@@ -7,12 +7,14 @@ import { createClient } from "@/lib/supabase/server";
 export async function createFeedbackRequest(formData: FormData) {
   const inviteeIds = formData.getAll("inviteeIds").map(String);
   const subtype = String(formData.get("subtype") || "general");
+  const name = String(formData.get("name") || "").trim();
 
   const supabase = await createClient();
 
   const { error } = await supabase.rpc("create_ad_hoc_feedback_request", {
     p_invitee_member_ids: inviteeIds,
     p_subtype: subtype,
+    p_name: name || null,
   });
 
   if (error) {
@@ -26,12 +28,14 @@ export async function createFeedbackRequest(formData: FormData) {
 export async function createFeedbackRequestForIndividual(formData: FormData) {
   const inviteeEmails = formData.getAll("inviteeEmails").map(String);
   const subtype = String(formData.get("subtype") || "general");
+  const name = String(formData.get("name") || "").trim();
 
   const supabase = await createClient();
 
   const { error } = await supabase.rpc("create_ad_hoc_feedback_request_for_individual", {
     p_invitee_emails: inviteeEmails,
     p_subtype: subtype,
+    p_name: name || null,
   });
 
   if (error) {

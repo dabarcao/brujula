@@ -99,6 +99,18 @@ export default async function NewIndividual360Page({
       )}
 
       <form action={createIndividualCycleRequest} className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1 text-sm">
+          Nombre para identificar este 360 (se mostrará como &ldquo;Ciclo 360{" "}
+          {"{tu nombre}"}&rdquo;)
+          <input
+            name="name"
+            type="text"
+            required
+            placeholder="2026"
+            className="border rounded px-3 py-2"
+          />
+        </label>
+
         <label className="flex flex-col gap-1 text-sm max-w-xs">
           Fecha límite para responder
           <input

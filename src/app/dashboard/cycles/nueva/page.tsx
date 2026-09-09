@@ -65,7 +65,7 @@ export default async function NewCyclePage({
 
       <form action={createFeedbackCycle} className="flex flex-col gap-4">
         <label className="flex flex-col gap-1 text-sm">
-          Nombre del ciclo
+          Nombre del ciclo (se mostrará como &ldquo;Ciclo 360 {"{tu nombre}"}&rdquo;)
           <input
             name="name"
             type="text"

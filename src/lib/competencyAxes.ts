@@ -49,25 +49,3 @@ export function buildCompetencyAxes(
     })
     .sort((a, b) => a.rolePosition - b.rolePosition || a.name.localeCompare(b.name));
 }
-
-export function computeGroupAverages(axes: CompetencyAxis[]) {
-  const byGroup = new Map<string, { name: string; position: number; values: number[] }>();
-  for (const axis of axes) {
-    if (axis.avgValue == null) continue;
-    const key = axis.roleCode || "plenitud";
-    const name = axis.roleCode ? axis.roleName : "Plenitud";
-    const position = axis.roleCode ? axis.rolePosition : 5;
-    if (!byGroup.has(key)) {
-      byGroup.set(key, { name, position, values: [] });
-    }
-    byGroup.get(key)!.values.push(axis.avgValue);
-  }
-  return Array.from(byGroup.entries())
-    .map(([code, { name, position, values }]) => ({
-      code,
-      name,
-      position,
-      average: values.reduce((sum, v) => sum + v, 0) / values.length,
-    }))
-    .sort((a, b) => a.position - b.position);
-}

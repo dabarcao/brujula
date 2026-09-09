@@ -48,7 +48,7 @@ export default async function ManageCycleEvaluatorsPage({
 
   const { data: request } = await supabase
     .from("feedback_requests")
-    .select("id, requester_member_id, request_type, status, closes_at")
+    .select("id, requester_member_id, request_type, status, closes_at, name, feedback_cycles(name)")
     .eq("id", id)
     .maybeSingle();
 
@@ -141,14 +141,18 @@ export default async function ManageCycleEvaluatorsPage({
     );
   }
 
+  const cycleName = (request.feedback_cycles as unknown as { name: string } | null)?.name;
+  const requestName = cycleName || request.name;
+
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-semibold">Gestionar evaluadores</h1>
         <Link href="/dashboard" className="text-sm underline text-gray-600">
           Volver al panel
         </Link>
       </div>
+      <p className="text-sm text-gray-500 mb-7">{requestName || " "}</p>
 
       {error && <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>}
       {updated && !error && (

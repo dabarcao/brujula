@@ -54,7 +54,7 @@ export default async function CyclesListPage() {
           {cycles.map((cycle) => (
             <li key={cycle.id} className="px-4 py-3 text-sm">
               <Link href={`/dashboard/cycles/${cycle.id}/estado`} className="underline">
-                {cycle.name}
+                Ciclo 360 {cycle.name}
               </Link>
               <span className="text-gray-500">
                 {" "}

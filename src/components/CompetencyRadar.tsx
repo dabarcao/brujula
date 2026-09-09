@@ -22,16 +22,16 @@ type Axis = {
   selfValue?: number | null;
 };
 
+// 5 colores bien distintos entre sí (rojo/azul/verde/naranja/amarillo) —
+// antes "coach" era verde-lima (se confundía con el verde de Arquitecto)
+// y "catalizador" era un naranja muy rojizo (se confundía con el rojo de
+// Plenitud). Ninguno coincide tampoco con EVALUATOR_CATEGORY_COLORS.
 export const GROUP_COLORS: Record<string, string> = {
-  plenitud: "#dc2626",
-  visionario: "#2563eb",
-  arquitecto: "#059669",
-  catalizador: "#ea580c",
-  // Antes violeta (#7c3aed) — coincidía exactamente con el color de la
-  // categoría de evaluador "Jefe" (CompetencyComparisonChart), que se
-  // ve en el mismo gráfico. Verde-lima: distinto del azul de Visionario
-  // y del ámbar que ya usa "Compañero de la empresa".
-  coach: "#65a30d",
+  plenitud: "#dc2626", // rojo
+  visionario: "#2563eb", // azul
+  arquitecto: "#059669", // verde
+  catalizador: "#f97316", // naranja
+  coach: "#eab308", // amarillo
 };
 
 const DEFAULT_COLOR = "#6b7280";
@@ -262,6 +262,11 @@ export default function CompetencyRadar({
             fill={p.color}
           >
             {p.name}
+            {p.avgValue != null && (
+              <tspan x={p.labelX} dy="1.15em" fontWeight={700}>
+                {p.avgValue.toFixed(1)}
+              </tspan>
+            )}
           </text>
         ))}
       </svg>

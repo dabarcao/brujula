@@ -58,6 +58,7 @@ export async function createIndividualCycleRequest(formData: FormData) {
   const evaluatorEmails = formData.getAll("evaluatorEmails").map(String);
   const categories = evaluatorEmails.map((email) => String(formData.get(`category_${email}`) || ""));
   const closesAt = String(formData.get("closesAt") || "");
+  const name = String(formData.get("name") || "").trim();
 
   const supabase = await createClient();
 
@@ -65,6 +66,7 @@ export async function createIndividualCycleRequest(formData: FormData) {
     p_evaluator_emails: evaluatorEmails,
     p_evaluator_categories: categories,
     p_closes_at: closesAt,
+    p_name: name || null,
   });
 
   if (error) {

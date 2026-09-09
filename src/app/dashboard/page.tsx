@@ -3,14 +3,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
 
-const SUBTYPE_LABELS: Record<string, string> = {
-  general: "general / desarrollo profesional",
-  meeting: "reunión / presentación",
-  collaboration: "colaboración",
-  leadership_initiative: "liderazgo de iniciativa",
-  competencias: "por competencias",
-};
-
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -150,7 +142,7 @@ export default async function DashboardPage() {
 
   const { data: myRequests } = await supabase
     .from("feedback_requests")
-    .select("id, created_at, request_type, subtype, status")
+    .select("id, created_at, request_type, status, name, feedback_cycles(name)")
     .eq("requester_member_id", member.id)
     .order("created_at", { ascending: false });
 
@@ -261,7 +253,7 @@ export default async function DashboardPage() {
           <ul className="border rounded divide-y">
             {cyclesToOrganize.map((cycle) => (
               <li key={cycle.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                <span>{cycle.name}</span>
+                <span>Ciclo 360 {cycle.name}</span>
                 <Link href={`/dashboard/cycles/${cycle.id}`} className="underline text-gray-700">
                   Organizar evaluadores
                 </Link>
@@ -319,16 +311,21 @@ export default async function DashboardPage() {
           <ul className="border rounded divide-y">
             {myRequests.map((request) => {
               const isCycle = request.request_type === "cycle";
+              const cycleName = (request.feedback_cycles as unknown as { name: string } | null)
+                ?.name;
+              // "Ciclo 360 " / "Feedback ágil " es siempre el prefijo, igual
+              // que en feedback/[id]/page.tsx.
+              const fallbackDate = `del ${new Date(request.created_at).toLocaleDateString("es-ES")}`;
+              const label = isCycle
+                ? `Ciclo 360 ${cycleName || request.name || fallbackDate}`
+                : `Feedback ágil ${request.name || fallbackDate}`;
               return (
                 <li
                   key={request.id}
                   className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
                 >
                   <span>
-                    Solicitud del {new Date(request.created_at).toLocaleDateString("es-ES")}
-                    {isCycle
-                      ? " (ciclo 360)"
-                      : ` (${SUBTYPE_LABELS[request.subtype ?? "general"]})`}
+                    {label}
                     {request.status === "closed" && !isCycle ? " — cerrada" : ""}
                   </span>
                   <span className="flex items-center gap-3 shrink-0">
