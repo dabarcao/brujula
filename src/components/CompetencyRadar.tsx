@@ -20,6 +20,11 @@ type Axis = {
   // comparativo del ciclo 360 (ver get_request_competency_comparison).
   // Cuando ningún eje la trae, no se dibuja la serie negra.
   selfValue?: number | null;
+  // Contador de menciones del feedback ágil narrativo desde el último 360
+  // cerrado (+1 "destacas", -1 "desafío"/"te gustaría ver más") — solo lo
+  // rellena "Mi mapa de competencias" (sección 15 del spec, "señal de
+  // progreso"). Se pinta aparte de avgValue, nunca mezclado con la nota.
+  mentionDelta?: number | null;
 };
 
 // 5 colores bien distintos entre sí (rojo/azul/verde/naranja/amarillo) —

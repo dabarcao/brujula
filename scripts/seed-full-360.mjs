@@ -7,6 +7,12 @@
 //
 // Uso:
 //   node scripts/seed-full-360.mjs persona@ejemplo.com "Nombre Apellido"
+//   node scripts/seed-full-360.mjs persona@ejemplo.com "Nombre Apellido" --no-close
+//
+// --no-close deja el 360 abierto y revelado (80% + autoevaluación) en vez
+// de cerrarlo al final — para probar el botón "Finalizar informe" a mano
+// en vez de simular también ese paso. Sin este flag, el script cierra el
+// 360 él mismo (comportamiento de siempre).
 //
 // El segundo argumento (nombre completo) es opcional — si se omite, se usa
 // la parte del email antes de la @. La cuenta objetivo se crea si no
@@ -76,7 +82,9 @@ async function main() {
     console.error('Uso: node scripts/seed-full-360.mjs persona@ejemplo.com "Nombre Apellido"');
     process.exit(1);
   }
-  const targetName = process.argv[3] || targetEmail.split("@")[0];
+  const args = process.argv.slice(3).filter((a) => a !== "--no-close");
+  const noClose = process.argv.includes("--no-close");
+  const targetName = args[0] || targetEmail.split("@")[0];
 
   const env = loadEnvLocal();
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
@@ -223,11 +231,15 @@ async function main() {
   });
   console.log(progress);
 
-  console.log("6. Cerrando el 360 para poder volver a lanzar el script...");
-  await rpc("close_cycle_request", targetToken, { p_request_id: requestId });
-  console.log("  cerrado");
-
-  console.log(`\nListo: /dashboard/feedback/${requestId} (login ${targetEmail} / kairos123)`);
+  if (noClose) {
+    console.log("6. --no-close: se deja abierto (revelado, listo para probar 'Finalizar informe').");
+    console.log(`\nListo (sin cerrar): /dashboard/feedback/${requestId} (login ${targetEmail} / kairos123)`);
+  } else {
+    console.log("6. Cerrando el 360 para poder volver a lanzar el script...");
+    await rpc("close_cycle_request", targetToken, { p_request_id: requestId });
+    console.log("  cerrado");
+    console.log(`\nListo: /dashboard/feedback/${requestId} (login ${targetEmail} / kairos123)`);
+  }
 }
 
 main().catch((e) => {

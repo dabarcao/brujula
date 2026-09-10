@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { generateAiInterpretation } from "@/lib/aiInterpretation";
 
 export async function createFeedbackCycle(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
@@ -31,6 +32,35 @@ export async function createFeedbackCycle(formData: FormData) {
 
   revalidatePath("/dashboard");
   redirect("/dashboard?cycleCreated=1");
+}
+
+// "El usuario es el dueño de su proceso, no las condiciones" (spec.md
+// sección 4.1): finalizar es siempre una acción explícita de quien pidió
+// el 360, nunca algo que pase solo por fecha o por 100% de respuestas.
+// Al finalizar (close_cycle_request) se genera, en la misma llamada, la
+// interpretación del perfil por IA — como cerrar ya es un evento real y
+// síncrono, no hace falta ningún proceso por lotes para esto.
+export async function finalizeCycleRequest(formData: FormData) {
+  const requestId = String(formData.get("requestId") || "");
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("close_cycle_request", { p_request_id: requestId });
+
+  if (error) {
+    redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
+  }
+
+  const result = await generateAiInterpretation(supabase, requestId);
+  if (result) {
+    await supabase.rpc("save_ai_interpretation", {
+      p_request_id: requestId,
+      p_text: result.interpretation,
+    });
+  }
+
+  revalidatePath(`/dashboard/feedback/${requestId}`);
+  redirect(`/dashboard/feedback/${requestId}`);
 }
 
 export async function organizeCycleEvaluators(formData: FormData) {

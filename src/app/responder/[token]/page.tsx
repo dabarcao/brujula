@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { submitFeedbackResponse } from "@/app/actions/feedback";
-import CompetencyPicker from "@/components/CompetencyPicker";
-import ScaleSlider from "@/components/ScaleSlider";
+import ResponderWizard from "@/components/ResponderWizard";
 
 type Question = {
   id: string;
@@ -114,47 +112,12 @@ export default async function RespondPage({
         <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
       )}
 
-      <form action={submitFeedbackResponse} className="flex flex-col gap-6">
-        <input type="hidden" name="token" value={token} />
-
-        {questions.map((question) => (
-          <div key={question.id} className="flex flex-col gap-1">
-            <input type="hidden" name="questionId" value={question.id} />
-            <input type="hidden" name="questionType" value={question.question_type} />
-            <label className="text-sm font-medium">
-              {question.prompt}
-              {!question.required && (
-                <span className="text-gray-400 font-normal"> (opcional)</span>
-              )}
-            </label>
-
-            {question.question_type === "scale" ? (
-              <ScaleSlider name={`answer_${question.id}`} levels={scaleLevels} />
-            ) : question.question_type === "competency" ? (
-              <CompetencyPicker
-                questionId={question.id}
-                competencies={competencies}
-                maxSelections={question.max_selections || 1}
-                scaleLevels={scaleLevels}
-              />
-            ) : (
-              <textarea
-                name={`answer_${question.id}`}
-                required={question.required}
-                rows={3}
-                className="border rounded px-3 py-2 text-sm"
-              />
-            )}
-          </div>
-        ))}
-
-        <button
-          type="submit"
-          className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800 self-start"
-        >
-          Enviar feedback
-        </button>
-      </form>
+      <ResponderWizard
+        token={token}
+        questions={questions}
+        scaleLevels={scaleLevels}
+        competencies={competencies}
+      />
     </main>
   );
 }

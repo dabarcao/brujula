@@ -7,9 +7,11 @@ import {
   closeFeedbackRequest,
   updateFeedbackRequestEvaluators,
 } from "@/app/actions/feedback";
+import { finalizeCycleRequest } from "@/app/actions/cycles";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
 import CompetencyComparisonChart from "@/components/CompetencyComparisonChart";
 import { GROUP_COLORS, GROUP_LABELS } from "@/components/CompetencyRadar";
+import { SABOTEADOR_LABELS } from "@/lib/aiInterpretation";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -217,6 +219,54 @@ function CompetencyComparison({
   );
 }
 
+type SaboteadorRow = {
+  saboteador_code: string;
+  avg_value: number;
+  is_high: boolean;
+};
+
+// Datos crudos de los 5 saboteadores (no solo el párrafo de la IA) —
+// mismo lenguaje visual que la tabla de CompetencyComparisonChart, pero
+// sin columna de "media de compañeros": estas preguntas son solo de
+// autoevaluación por diseño (migración 0061), nunca se le piden al
+// grupo evaluador, así que aquí no hay "donde me ven", solo "donde me
+// veo".
+function SaboteadoresReport({ rows }: { rows: SaboteadorRow[] }) {
+  if (rows.length === 0) return null;
+  const sorted = [...rows].sort((a, b) => b.avg_value - a.avg_value);
+  return (
+    <div className="mb-8">
+      <p className="text-sm font-medium text-gray-500 mb-1">Tus saboteadores</p>
+      <p className="text-xs text-gray-400 mb-4">
+        Solo autoevaluación — nadie más puntúa esto, así que no hay una media de
+        compañeros con la que compararlo.
+      </p>
+      <div className="flex flex-col gap-3">
+        {sorted.map((row) => {
+          const label = SABOTEADOR_LABELS[row.saboteador_code] || row.saboteador_code;
+          const color = row.is_high ? "#b45309" : "#6b7280";
+          return (
+            <div key={row.saboteador_code}>
+              <div className="flex items-center justify-between text-sm mb-1">
+                <span className="font-medium" style={{ color: row.is_high ? color : undefined }}>
+                  {label}
+                </span>
+                <span className="text-gray-500">{row.avg_value.toFixed(1)} / 5</span>
+              </div>
+              <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${(row.avg_value / 5) * 100}%`, backgroundColor: color }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type ColleagueRow = {
   id: string;
   email: string;
@@ -251,7 +301,7 @@ export default async function FeedbackRequestPage({
   const { data: request } = await supabase
     .from("feedback_requests")
     .select(
-      "id, created_at, requester_member_id, request_type, status, closes_at, name, feedback_cycles(name)"
+      "id, created_at, requester_member_id, request_type, status, closes_at, name, feedback_cycles(name), ai_interpretation"
     )
     .eq("id", id)
     .maybeSingle();
@@ -276,10 +326,6 @@ export default async function FeedbackRequestPage({
   // aparte.
   const totalResponseCount = (progress?.response_count ?? 0) + (progress?.self_responded ? 1 : 0);
 
-  // "Definitivo" cuando ya no puede cambiar más: la solicitud se cerró a
-  // mano, respondieron todos los invitados, o (en un ciclo 360) ya pasó la
-  // fecha de cierre. Mientras tanto, si ya se reveló, es "preliminar" —
-  // puede variar según sigan llegando respuestas.
   const { count: totalInvitees } = await supabase
     .from("feedback_invitations")
     .select("id", { count: "exact", head: true })
@@ -287,18 +333,28 @@ export default async function FeedbackRequestPage({
 
   const cycleClosesAt: string | null = request.closes_at ?? null;
 
-  const today = new Date().toISOString().slice(0, 10);
-  const isFinal =
-    request.status === "closed" ||
-    (totalInvitees != null && totalResponseCount >= totalInvitees) ||
-    (cycleClosesAt != null && cycleClosesAt < today);
+  const isCycle = request.request_type === "cycle";
+
+  // "Definitivo" cuando ya no puede cambiar más. Para un 360: solo el
+  // propio solicitante finalizándolo a mano (status = 'closed') —
+  // "el usuario es el dueño de su proceso, no las condiciones" (sección
+  // 4.1): ni la fecha ni el 100% de respuestas cierran nada solos. Para
+  // el flujo ágil, que no se tocó, sigue el criterio anterior.
+  const isFinal = isCycle
+    ? request.status === "closed"
+    : request.status === "closed" ||
+      (totalInvitees != null && totalResponseCount >= totalInvitees);
+
+  // Comentarios de texto (y la interpretación de IA, más abajo) de un 360
+  // esperan a que el solicitante lo finalice — nunca solo con el 80%. En
+  // el flujo ágil, que no se tocó, siguen mostrándose en cuanto se revela.
+  const showRestrictedContent = revealed && (!isCycle || isFinal);
 
   // La autoevaluación no se muestra aquí (texto/escala en crudo): queda
   // guardada para una futura comparativa con gráfica frente a la media
   // global o por grupos, no para listarla tal cual en esta vista.
-  const peerGroups = revealed ? await loadQuestionGroups(supabase, id, false) : [];
+  const peerGroups = showRestrictedContent ? await loadQuestionGroups(supabase, id, false) : [];
 
-  const isCycle = request.request_type === "cycle";
   const cycleName = (request.feedback_cycles as unknown as { name: string } | null)?.name;
   // "Ciclo 360 " / "Feedback ágil " es siempre el prefijo — la persona
   // solo escribe lo que sigue (ver el label de cada formulario de
@@ -324,6 +380,11 @@ export default async function FeedbackRequestPage({
     : { data: null };
   const competencyByCategory =
     (competencyByCategoryData as CompetencyByCategoryRow[] | null) || [];
+
+  const { data: saboteadoresData } = isCycle && showRestrictedContent
+    ? await supabase.rpc("get_request_saboteadores", { p_request_id: id })
+    : { data: null };
+  const saboteadores = (saboteadoresData as SaboteadorRow[] | null) || [];
 
   const isAdHocOpen = request.request_type === "ad_hoc" && request.status === "open";
   const canManage = isAdHocOpen && totalResponseCount === 0;
@@ -474,17 +535,54 @@ export default async function FeedbackRequestPage({
           </p>
         ) : (
           <>
-            {!isFinal && (
+            {!isFinal && !isCycle && (
               <p className="text-xs text-gray-500 mb-4">
                 Todavía puede cambiar: faltan respuestas por llegar
                 {cycleClosesAt ? ` o que se cierre el ${cycleClosesAt}` : ""}.
               </p>
+            )}
+            {isCycle && !isFinal && (
+              <div className="mb-6 border rounded-lg p-4">
+                <p className="text-xs text-gray-500 mb-3">
+                  Es preliminar: de momento solo ves los datos agregados.
+                  {cycleClosesAt ? ` Fecha límite sugerida: ${cycleClosesAt}.` : ""} Los
+                  comentarios de texto y la interpretación de tu perfil se
+                  desbloquean cuando tú decidas finalizarlo — no antes, y no
+                  automáticamente.
+                </p>
+                <form action={finalizeCycleRequest}>
+                  <input type="hidden" name="requestId" value={id} />
+                  <button
+                    type="submit"
+                    className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800"
+                  >
+                    Finalizar informe
+                  </button>
+                </form>
+              </div>
+            )}
+            {isCycle && isFinal && cycleClosesAt && (
+              <p className="text-xs text-gray-500 mb-4">Cerrado el {cycleClosesAt}.</p>
+            )}
+            {isCycle && showRestrictedContent && request.ai_interpretation && (
+              <div className="mb-8 border rounded-lg p-4 bg-gray-50">
+                <p className="text-xs font-semibold text-gray-500 mb-2">
+                  Interpretación de tu perfil{" "}
+                  <span className="font-normal text-gray-400">
+                    (generado por IA, competencias y saboteadores juntos)
+                  </span>
+                </p>
+                <div className="text-sm text-gray-700 flex flex-col gap-3 whitespace-pre-line">
+                  {request.ai_interpretation}
+                </div>
+              </div>
             )}
             {isCycle ? (
               <CompetencyComparison rows={competencyComparison} byCategoryRows={competencyByCategory} />
             ) : (
               <CompetencyNarrativeReport rows={competencyNarrative} />
             )}
+            {isCycle && showRestrictedContent && <SaboteadoresReport rows={saboteadores} />}
             <QuestionGroupList groups={peerGroups} />
           </>
         )}

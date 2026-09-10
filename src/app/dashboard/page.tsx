@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
+import { respondToReportGroup } from "@/app/actions/reportGroups";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -188,6 +189,18 @@ export default async function DashboardPage() {
   // misma entrada en dos sitios.
   const cyclesToOrganize = openCycles.filter((cycle) => !cycleRequestByCycleId.get(cycle.id));
 
+  // Informes de grupo son solo empresa (sección 17) — ni se consulta para
+  // una cuenta individual.
+  let pendingGroups: { id: string; name: string }[] = [];
+  if (!isIndividual) {
+    const { data: groupsData } = await supabase.rpc("get_my_report_groups");
+    pendingGroups = (
+      (groupsData as { id: string; name: string; my_status: string | null }[] | null) || []
+    )
+      .filter((g) => g.my_status === "pending")
+      .map((g) => ({ id: g.id, name: g.name }));
+  }
+
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
@@ -223,6 +236,14 @@ export default async function DashboardPage() {
         >
           Mi mapa de competencias
         </Link>
+        {!isIndividual && (
+          <Link
+            href="/dashboard/groups"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+          >
+            Informes de grupo
+          </Link>
+        )}
         {member.is_supervisor && !isIndividual && (
           <>
             <Link
@@ -265,11 +286,34 @@ export default async function DashboardPage() {
 
       <section className="mt-8">
         <h2 className="text-sm font-medium text-gray-700 mb-3">Tareas pendientes</h2>
-        {!pendingInvitations || pendingInvitations.length === 0 ? (
+        {pendingGroups.length === 0 && (!pendingInvitations || pendingInvitations.length === 0) ? (
           <p className="text-sm text-gray-500">No tienes feedback pendiente de dar.</p>
         ) : (
           <ul className="border rounded divide-y">
-            {pendingInvitations.map((invitation) => {
+            {pendingGroups.map((g) => (
+              <li key={g.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <span>
+                  Te han invitado al grupo <strong>{g.name}</strong>
+                </span>
+                <span className="flex items-center gap-3 shrink-0">
+                  <form action={respondToReportGroup}>
+                    <input type="hidden" name="groupId" value={g.id} />
+                    <input type="hidden" name="accept" value="true" />
+                    <button type="submit" className="underline text-gray-700">
+                      Confirmar
+                    </button>
+                  </form>
+                  <form action={respondToReportGroup}>
+                    <input type="hidden" name="groupId" value={g.id} />
+                    <input type="hidden" name="accept" value="false" />
+                    <button type="submit" className="underline text-gray-400">
+                      Rechazar
+                    </button>
+                  </form>
+                </span>
+              </li>
+            ))}
+            {pendingInvitations?.map((invitation) => {
               const isSelf = invitation.evaluator_category === "self";
               return (
                 <li

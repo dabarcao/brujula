@@ -48,7 +48,7 @@ export default async function ManageCycleEvaluatorsPage({
 
   const { data: request } = await supabase
     .from("feedback_requests")
-    .select("id, requester_member_id, request_type, status, closes_at, name, feedback_cycles(name)")
+    .select("id, requester_member_id, request_type, status, name, feedback_cycles(name)")
     .eq("id", id)
     .maybeSingle();
 
@@ -70,23 +70,13 @@ export default async function ManageCycleEvaluatorsPage({
 
   const totalResponseCount = (progress?.response_count ?? 0) + (progress?.self_responded ? 1 : 0);
 
-  const { count: totalInvitees } = await supabase
-    .from("feedback_invitations")
-    .select("id", { count: "exact", head: true })
-    .eq("feedback_request_id", id);
-
-  const cycleClosesAt: string | null = request.closes_at ?? null;
-  const today = new Date().toISOString().slice(0, 10);
-  const isFinal =
-    request.status === "closed" ||
-    (totalInvitees != null && totalResponseCount >= totalInvitees) ||
-    (cycleClosesAt != null && cycleClosesAt < today);
-
-  // Se puede seguir añadiendo evaluadores mientras el proceso no esté
-  // cerrado, aunque ya haya respuestas — pero solo se puede modificar la
-  // categoría o quitar a alguien ya invitado mientras nadie haya respondido
-  // todavía.
-  const canManageCycle = request.status === "open" && !isFinal;
+  // "El usuario es el dueño de su proceso, no las condiciones" (sección
+  // 4.1): un 360 ya no se cierra solo por fecha ni por 100% de
+  // respuestas — status = 'open' es la única condición, así que se puede
+  // seguir añadiendo evaluadores hasta que el propio solicitante decida
+  // finalizarlo (informe del 360). Solo se puede modificar la categoría o
+  // quitar a alguien ya invitado mientras nadie haya respondido todavía.
+  const canManageCycle = request.status === "open";
   const canFullyEditCycle = canManageCycle && totalResponseCount === 0;
 
   const { data: settings } = await supabase
