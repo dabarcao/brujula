@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
-import { respondToReportGroup } from "@/app/actions/reportGroups";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -143,9 +142,15 @@ export default async function DashboardPage() {
 
   const { data: myRequests } = await supabase
     .from("feedback_requests")
-    .select("id, created_at, request_type, status, name, feedback_cycles(name)")
+    .select("id, created_at, request_type, status, name, closes_at, feedback_cycles(name)")
     .eq("requester_member_id", member.id)
     .order("created_at", { ascending: false });
+
+  // Cerrado ya no es "todavía en curso" (sección 4.1: cerrar es siempre una
+  // acción explícita) — se separan en dos listas para no mezclar lo que
+  // sigue vivo con lo que ya quedó fijado.
+  const openRequests = (myRequests || []).filter((r) => r.status !== "closed");
+  const closedRequests = (myRequests || []).filter((r) => r.status === "closed");
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -295,22 +300,9 @@ export default async function DashboardPage() {
                 <span>
                   Te han invitado al grupo <strong>{g.name}</strong>
                 </span>
-                <span className="flex items-center gap-3 shrink-0">
-                  <form action={respondToReportGroup}>
-                    <input type="hidden" name="groupId" value={g.id} />
-                    <input type="hidden" name="accept" value="true" />
-                    <button type="submit" className="underline text-gray-700">
-                      Confirmar
-                    </button>
-                  </form>
-                  <form action={respondToReportGroup}>
-                    <input type="hidden" name="groupId" value={g.id} />
-                    <input type="hidden" name="accept" value="false" />
-                    <button type="submit" className="underline text-gray-400">
-                      Rechazar
-                    </button>
-                  </form>
-                </span>
+                <Link href={`/dashboard/groups/${g.id}`} className="underline text-gray-700 shrink-0">
+                  Ver e ir a confirmar
+                </Link>
               </li>
             ))}
             {pendingInvitations?.map((invitation) => {
@@ -349,11 +341,11 @@ export default async function DashboardPage() {
 
       <section className="mt-8">
         <h2 className="text-sm font-medium text-gray-700 mb-3">Mis feedbacks en curso</h2>
-        {!myRequests || myRequests.length === 0 ? (
+        {openRequests.length === 0 ? (
           <p className="text-sm text-gray-500">Todavía no has pedido feedback.</p>
         ) : (
           <ul className="border rounded divide-y">
-            {myRequests.map((request) => {
+            {openRequests.map((request) => {
               const isCycle = request.request_type === "cycle";
               const cycleName = (request.feedback_cycles as unknown as { name: string } | null)
                 ?.name;
@@ -368,10 +360,7 @@ export default async function DashboardPage() {
                   key={request.id}
                   className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
                 >
-                  <span>
-                    {label}
-                    {request.status === "closed" && !isCycle ? " — cerrada" : ""}
-                  </span>
+                  <span>{label}</span>
                   <span className="flex items-center gap-3 shrink-0">
                     {isCycle && (
                       <Link
@@ -385,6 +374,41 @@ export default async function DashboardPage() {
                       {isCycle ? "Ver informe" : "Ver"}
                     </Link>
                   </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-medium text-gray-700 mb-3">Mis feedbacks cerrados</h2>
+        {closedRequests.length === 0 ? (
+          <p className="text-sm text-gray-500">Todavía no has cerrado ningún feedback.</p>
+        ) : (
+          <ul className="border rounded divide-y">
+            {closedRequests.map((request) => {
+              const isCycle = request.request_type === "cycle";
+              const cycleName = (request.feedback_cycles as unknown as { name: string } | null)
+                ?.name;
+              const fallbackDate = `del ${new Date(request.created_at).toLocaleDateString("es-ES")}`;
+              const label = isCycle
+                ? `Ciclo 360 ${cycleName || request.name || fallbackDate}`
+                : `Feedback ágil ${request.name || fallbackDate}`;
+              return (
+                <li
+                  key={request.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
+                >
+                  <span>
+                    {label}
+                    {request.closes_at && (
+                      <span className="text-gray-400"> — cerrado el {request.closes_at}</span>
+                    )}
+                  </span>
+                  <Link href={`/dashboard/feedback/${request.id}`} className="underline shrink-0">
+                    {isCycle ? "Ver informe" : "Ver"}
+                  </Link>
                 </li>
               );
             })}

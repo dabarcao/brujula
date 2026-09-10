@@ -193,7 +193,12 @@ export default async function ReportGroupPage({
           )}
 
           <div className="flex justify-center">
-            <CompetencyComparisonChart axes={comparisonAxes} categorySeries={[]} />
+            <CompetencyComparisonChart
+              axes={comparisonAxes}
+              categorySeries={[]}
+              selfLabel="Auto-percepción (equipo)"
+              peerLabel="Evaluadores"
+            />
           </div>
 
           <p className="text-xs text-gray-400 mt-6">

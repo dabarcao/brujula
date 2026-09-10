@@ -26,10 +26,18 @@ export default function CompetencyComparisonChart({
   axes: rawAxes,
   categorySeries,
   size = 440,
+  // Por defecto para el informe individual ("tú" tiene sentido ahí — quien
+  // lo ve es la propia persona evaluada). El informe de grupo, que reutiliza
+  // este mismo componente, no tiene un "tú" único — le pasa sus propias
+  // etiquetas ("Autopercepción (media)" / "Compañeros (media)").
+  selfLabel = "Tú",
+  peerLabel = "Media",
 }: {
   axes: Axis[];
   categorySeries: CategorySeries[];
   size?: number;
+  selfLabel?: string;
+  peerLabel?: string;
 }) {
   // Igual que en CompetencyRadar: los ejes siempre se agrupan por rol
   // antes de dibujarlos, sin importar en qué orden lleguen de la
@@ -171,10 +179,10 @@ export default function CompetencyComparisonChart({
   // solo trae grupos con su mínimo cumplido (3, salvo "jefe" que basta
   // con 1, migración 0052), así que aquí no hace falta filtrar más.
   const tableColumns: { key: string; label: string; getValue: (axis: (typeof axes)[number]) => number | null }[] = [
-    { key: "peer", label: "Media", getValue: (axis) => axis.peerAvgValue },
+    { key: "peer", label: peerLabel, getValue: (axis) => axis.peerAvgValue },
   ];
   if (hasAnySelf) {
-    tableColumns.push({ key: "self", label: "Tú", getValue: (axis) => axis.selfValue });
+    tableColumns.push({ key: "self", label: selfLabel, getValue: (axis) => axis.selfValue });
   }
   for (const series of categorySeries) {
     tableColumns.push({
@@ -323,7 +331,7 @@ export default function CompetencyComparisonChart({
             </span>
           ))}
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-900" /> Tú
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-900" /> {selfLabel}
           </span>
         </div>
       )}
