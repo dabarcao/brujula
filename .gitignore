@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# informes reales de personas identificables (perfiles TLC a migrar) —
+# nunca deben subirse al repo
+/migrables
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

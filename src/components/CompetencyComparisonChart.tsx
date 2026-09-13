@@ -158,10 +158,13 @@ export default function CompetencyComparisonChart({
 
   const seriesByCategory = new Map(categorySeries.map((s) => [s.category, s.valuesByCode]));
 
-  // Escala de referencia (1-5) — con Plenitud centrada arriba, el hueco
-  // limpio más cercano a la vertical opuesta es el que separa Arquitecto
-  // de Catalizador (justo abajo del todo con 5 sectores iguales).
-  const scaleAngle = Math.PI / 2;
+  // Escala de referencia (1-5) — a las 12:00, en el hueco entre los dos
+  // ejes de Plenitud (que siempre queda centrada arriba). Desde el modelo
+  // v2 los 5 grupos ya no son de tamaño igual (2/4/4/3/3 competencias),
+  // así que el límite entre dos sectores ya no cae siempre en el mismo
+  // sitio — el centro de Plenitud sí es estable, pase lo que pase con el
+  // resto de grupos.
+  const scaleAngle = -Math.PI / 2;
   const scaleTicks = [1, 2, 3, 4, 5].map((level) => {
     const r = maxRadius * (level / 5);
     return {
@@ -264,7 +267,7 @@ export default function CompetencyComparisonChart({
           />
         ))}
         {wedges.map((w) => (
-          <path key={`wedge-${w.code}`} d={w.d} fill={w.color} opacity={0.18} />
+          <path key={`wedge-${w.code}`} d={w.d} fill={w.color} opacity={0.4} />
         ))}
         {categorySeries.map((series) =>
           activeCategories.has(series.category) ? (
@@ -388,12 +391,32 @@ export default function CompetencyComparisonChart({
                 <Fragment key={group.groupCode}>
                   <tr>
                     <td
-                      colSpan={1 + tableColumns.length}
                       className="px-3 py-1.5 text-xs font-semibold"
                       style={{ backgroundColor: `${color}14`, color }}
                     >
                       {GROUP_LABELS[group.groupCode] || group.groupCode}
                     </td>
+                    {tableColumns.map((col) => {
+                      // Media de la dimensión — solo entre las competencias
+                      // de este grupo que sí tienen dato en esta columna,
+                      // no un promedio forzado sobre todas.
+                      const values = group.rows
+                        .map((axis) => col.getValue(axis))
+                        .filter((v): v is number => v != null);
+                      const avg =
+                        values.length > 0
+                          ? values.reduce((a, b) => a + b, 0) / values.length
+                          : null;
+                      return (
+                        <td
+                          key={col.key}
+                          className="px-3 py-1.5 text-xs font-semibold text-right"
+                          style={{ backgroundColor: `${color}14`, color }}
+                        >
+                          {avg != null ? avg.toFixed(1) : "—"}
+                        </td>
+                      );
+                    })}
                   </tr>
                   {group.rows.map((axis) => (
                     <tr key={axis.code}>

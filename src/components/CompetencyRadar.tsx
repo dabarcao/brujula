@@ -53,7 +53,7 @@ export const GROUP_ORDER: Record<string, number> = {
 };
 
 export const GROUP_LABELS: Record<string, string> = {
-  visionario: "Visionario",
+  visionario: "Visión",
   arquitecto: "Arquitecto",
   catalizador: "Catalizador",
   coach: "Coach",

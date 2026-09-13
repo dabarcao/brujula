@@ -3,6 +3,20 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
 
+// Único subtipo real hoy es "competencias" (pantalla de creación,
+// SubtypeFieldset en feedback/nueva/page.tsx) — el resto son legado ya
+// retirado de esa pantalla o ideas todavía sin construir (Reconocimiento,
+// Feedback periódico, sección 17 del spec). Nunca inventar una etiqueta
+// genérica tipo "ágil" — mostrar siempre el subtipo real, aunque sea uno
+// legado.
+const AD_HOC_SUBTYPE_LABELS: Record<string, string> = {
+  competencias: "por competencias",
+  general: "general",
+  meeting: "de una reunión",
+  collaboration: "de una colaboración",
+  leadership_initiative: "de una iniciativa",
+};
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -25,7 +39,7 @@ export default async function DashboardPage() {
 
   let { data: member } = await supabase
     .from("members")
-    .select("id, is_supervisor, organization_id, organizations(name, kind)")
+    .select("id, is_supervisor, is_guest, organization_id, organizations(name, kind)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -53,7 +67,7 @@ export default async function DashboardPage() {
       } else {
         const { data: refreshedMember } = await supabase
           .from("members")
-          .select("id, is_supervisor, organization_id, organizations(name, kind)")
+          .select("id, is_supervisor, is_guest, organization_id, organizations(name, kind)")
           .eq("auth_user_id", user.id)
           .maybeSingle();
         member = refreshedMember;
@@ -86,6 +100,7 @@ export default async function DashboardPage() {
         member = {
           id: createdRow.member_id,
           is_supervisor: createdRow.is_supervisor,
+          is_guest: false,
           organization_id: createdRow.organization_id,
           organizations: { name: createdRow.organization_name, kind: createdRow.organization_kind },
         } as unknown as typeof member;
@@ -137,6 +152,8 @@ export default async function DashboardPage() {
           requester_member_id: string;
           requester_full_name: string | null;
           requester_email: string;
+          request_type: string;
+          subtype: string | null;
         }[]
       | null) || [];
 
@@ -217,17 +234,20 @@ export default async function DashboardPage() {
 
       <p className="text-gray-600">
         Sesión iniciada como <strong>{user.email}</strong>
-        {member.is_supervisor && !isIndividual ? " (administrador)" : ""}.
+        {member.is_supervisor && !isIndividual ? " (administrador)" : ""}
+        {member.is_guest ? " (invitado)" : ""}.
       </p>
 
       <div className="flex flex-wrap gap-2.5 mt-5">
-        <Link
-          href="/dashboard/feedback/nueva"
-          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
-        >
-          Pedir feedback
-        </Link>
-        {isIndividual && (
+        {!member.is_guest && (
+          <Link
+            href="/dashboard/feedback/nueva"
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+          >
+            Pedir feedback
+          </Link>
+        )}
+        {isIndividual && !member.is_guest && (
           <Link
             href="/dashboard/feedback/nueva-360"
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
@@ -235,12 +255,14 @@ export default async function DashboardPage() {
             Pedir feedback 360
           </Link>
         )}
-        <Link
-          href="/dashboard/mi-mapa"
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
-        >
-          Mi mapa de competencias
-        </Link>
+        {!member.is_guest && (
+          <Link
+            href="/dashboard/mi-mapa"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+          >
+            Mi mapa de competencias
+          </Link>
+        )}
         <Link
           href="/dashboard/biblioteca"
           className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
@@ -313,6 +335,10 @@ export default async function DashboardPage() {
             ))}
             {pendingInvitations?.map((invitation) => {
               const isSelf = invitation.evaluator_category === "self";
+              const isCycle = invitation.request_type === "cycle";
+              const label = isCycle
+                ? "360"
+                : AD_HOC_SUBTYPE_LABELS[invitation.subtype || ""] || invitation.subtype || "";
               return (
                 <li
                   key={invitation.token}
@@ -323,8 +349,9 @@ export default async function DashboardPage() {
                       "Tu autoevaluación"
                     ) : (
                       <>
-                        Feedback para{" "}
-                        <strong>
+                        Feedback <strong className="uppercase text-gray-900">{label}</strong>
+                        {" - "}
+                        <strong className="text-gray-900">
                           {invitation.requester_full_name ||
                             invitation.requester_email ||
                             "un compañero"}

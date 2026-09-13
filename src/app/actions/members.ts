@@ -8,6 +8,7 @@ export async function inviteMember(formData: FormData) {
   const email = String(formData.get("email") || "").trim();
   const fullName = String(formData.get("fullName") || "").trim();
   const departmentId = String(formData.get("departmentId") || "").trim();
+  const isGuest = formData.get("isGuest") === "on";
 
   if (!email || !departmentId) {
     redirect(
@@ -22,6 +23,7 @@ export async function inviteMember(formData: FormData) {
     p_email: email,
     p_full_name: fullName,
     p_department_id: departmentId,
+    p_is_guest: isGuest,
   });
 
   if (error) {

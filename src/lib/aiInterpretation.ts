@@ -27,8 +27,21 @@ type SaboteadorRow = {
   is_high: boolean;
 };
 
+type OpenAnswerRow = {
+  answer_text: string | null;
+  survey_questions: { prompt: string; position: number; question_type: string } | null;
+  feedback_responses: { is_self: boolean } | null;
+};
+
+// El modelo escribe las 3 partes en una sola llamada (más barato y más
+// coherente entre sí que 3 llamadas sueltas) pero separadas con
+// marcadores literales, para poder guardarlas y mostrarlas por separado
+// más adelante si se decide así — de momento la página las sigue
+// concatenando en un único bloque visual.
 export type AiInterpretationResult = {
-  interpretation: string;
+  competencias: string;
+  saboteadores: string | null;
+  resumenAbiertas: string | null;
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -52,6 +65,8 @@ export const SABOTEADOR_LABELS: Record<string, string> = {
 };
 
 const MODEL = "claude-haiku-4-5-20251001";
+const SABOTEADORES_MARKER = "---SABOTEADORES---";
+const RESPUESTAS_ABIERTAS_MARKER = "---RESPUESTAS_ABIERTAS---";
 
 export async function generateAiInterpretation(
   supabase: SupabaseClient,
@@ -60,11 +75,21 @@ export async function generateAiInterpretation(
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
-  const [{ data: comparisonData }, { data: byCategoryData }, { data: saboteadoresData }] =
+  const [{ data: comparisonData }, { data: byCategoryData }, { data: saboteadoresData }, { data: openAnswersData }] =
     await Promise.all([
       supabase.rpc("get_request_competency_comparison", { p_request_id: requestId }),
       supabase.rpc("get_request_competency_by_category", { p_request_id: requestId }),
       supabase.rpc("get_request_saboteadores", { p_request_id: requestId }),
+      // Mismo dato que ya se muestra tal cual en el informe (QuestionGroupList,
+      // feedback/[id]/page.tsx) — no hace falta ninguna RPC nueva, el mismo
+      // supabase client de aquí ya tiene el contexto de sesión necesario.
+      supabase
+        .from("feedback_answers")
+        .select(
+          "answer_text, survey_questions(prompt, position, question_type), feedback_responses!inner(feedback_request_id, is_self)"
+        )
+        .eq("feedback_responses.feedback_request_id", requestId)
+        .eq("feedback_responses.is_self", false),
     ]);
 
   const comparison = (comparisonData as ComparisonRow[] | null) || [];
@@ -100,6 +125,18 @@ export async function generateAiInterpretation(
     (s) => s.is_high
   );
 
+  // Mismo agrupamiento por pregunta que ya usa QuestionGroupList en el
+  // informe — el texto libre se manda tal cual, sin resumir por nuestra
+  // cuenta, es la propia IA quien sintetiza (instrucción más abajo).
+  const openByPrompt = new Map<string, string[]>();
+  for (const row of (openAnswersData as unknown as OpenAnswerRow[] | null) || []) {
+    if (!row.survey_questions || row.survey_questions.question_type !== "open") continue;
+    if (!row.answer_text) continue;
+    const key = row.survey_questions.prompt;
+    if (!openByPrompt.has(key)) openByPrompt.set(key, []);
+    openByPrompt.get(key)!.push(row.answer_text);
+  }
+
   let prompt = `Eres un asistente que ayuda a interpretar el perfil de un informe de feedback 360 en Brújula, una herramienta de feedback anónimo humanista (no de evaluación de desempeño).
 
 Datos de competencias (escala 1-5, "sin dato" cuando no aplica):
@@ -117,16 +154,26 @@ Escribe una interpretación en español, en 2ª persona ("tú"), en 3-4 párrafo
       .join(", ");
     prompt += `
 
-Además, esta persona se autoevaluó alto en los siguientes saboteadores (patrones de pensamiento limitantes, en el sentido de Shirzad Chamine/Positive Intelligence — no son competencias, no los relaciones con ninguna de la lista de arriba de forma fija ni causal): ${saboteadorLines}. Estos datos de saboteadores son SOLO de autoevaluación — nadie más los puntúa, así que no hables de "cómo te ven" para ellos.
+Esta persona se autoevaluó alto en los siguientes saboteadores (patrones de pensamiento limitantes, en el sentido de Shirzad Chamine/Positive Intelligence — no son competencias, no los relaciones con ninguna de la lista de arriba de forma fija ni causal): ${saboteadorLines}. Estos datos de saboteadores son SOLO de autoevaluación — nadie más los puntúa, así que no hables de "cómo te ven" para ellos.
 
-5. Añade un párrafo más, tejido con naturalidad en la misma interpretación (no como una sección aparte ni con un encabezado propio), sobre qué creencia o patrón puede haber detrás de cada saboteador alto — siempre en tono de hipótesis ("puede estar relacionado con...", "vale la pena explorar si..."), nunca de veredicto ("esto te está limitando"). Si algún gap o divergencia de los datos de competencias de arriba parece conectar con ese saboteador, puedes mencionarlo como refuerzo, pero no fuerces la conexión si no la hay.
+Cuando termines la interpretación de competencias de arriba, añade en una línea aparte exactamente el texto "${SABOTEADORES_MARKER}" y, a continuación, un párrafo (o uno por saboteador si hay varios) sobre qué creencia o patrón puede haber detrás de cada saboteador alto — siempre en tono de hipótesis ("puede estar relacionado con...", "vale la pena explorar si..."), nunca de veredicto ("esto te está limitando"). Si algún gap o divergencia de los datos de competencias de arriba parece conectar con ese saboteador, puedes mencionarlo como refuerzo, pero no fuerces la conexión si no la hay. Esta parte va aparte, no la mezcles con la interpretación de competencias.`;
+  }
 
-Todo el texto debe leerse como UNA única interpretación conjunta del perfil (competencias y saboteadores entrelazados), nunca como dos bloques o informes separados.`;
+  if (openByPrompt.size > 0) {
+    const openLines = Array.from(openByPrompt.entries())
+      .map(([q, answers]) => `Pregunta: "${q}"\n${answers.map((a) => `- ${a}`).join("\n")}`)
+      .join("\n\n");
+    prompt += `
+
+Comentarios de texto libre que sus compañeros le han escrito (anonimizados, sin indicar quién escribió cada uno):
+${openLines}
+
+Cuando termines todo lo anterior, si en esos comentarios hay como máximo 1-2 temas que se repitan en varios comentarios de personas distintas (nunca a partir de un solo comentario aislado), añade en una línea aparte exactamente el texto "${RESPUESTAS_ABIERTAS_MARKER}" y, a continuación, un párrafo corto con ese resumen. No cites ningún comentario literalmente. Dilo explícitamente como una síntesis de las respuestas abiertas de sus compañeros (por ejemplo, "en las respuestas abiertas de tus compañeros se repite..."), para que quede claro que es un resumen de esas preguntas abiertas y no una competencia ni un saboteador más. Esta parte va aparte, no la mezcles con las anteriores. Si no hay ningún tema que se repita, no escribas ni el marcador ni esta parte.`;
   }
 
   prompt += `
 
-Tono humanista, cercano, nunca de evaluación de desempeño. No uses listas ni encabezados, solo párrafos de texto corrido separados por una línea en blanco.`;
+Tono humanista, cercano, nunca de evaluación de desempeño, en las tres partes por igual. No uses listas ni encabezados en ninguna de ellas, solo párrafos de texto corrido separados por una línea en blanco.`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -152,7 +199,27 @@ Tono humanista, cercano, nunca de evaluación de desempeño. No uses listas ni e
     const text = (data?.content?.[0]?.text as string | undefined)?.trim();
     if (!text) return null;
 
-    return { interpretation: text };
+    let competencias = text;
+    let saboteadoresText: string | null = null;
+    let resumenAbiertas: string | null = null;
+
+    if (competencias.includes(SABOTEADORES_MARKER)) {
+      const [before, after] = competencias.split(SABOTEADORES_MARKER);
+      competencias = before.trim();
+      if (after.includes(RESPUESTAS_ABIERTAS_MARKER)) {
+        const [sabo, abiertas] = after.split(RESPUESTAS_ABIERTAS_MARKER);
+        saboteadoresText = sabo.trim() || null;
+        resumenAbiertas = abiertas.trim() || null;
+      } else {
+        saboteadoresText = after.trim() || null;
+      }
+    } else if (competencias.includes(RESPUESTAS_ABIERTAS_MARKER)) {
+      const [before, after] = competencias.split(RESPUESTAS_ABIERTAS_MARKER);
+      competencias = before.trim();
+      resumenAbiertas = after.trim() || null;
+    }
+
+    return { competencias, saboteadores: saboteadoresText, resumenAbiertas };
   } catch (e) {
     console.error("No se pudo generar la interpretación IA:", e);
     return null;

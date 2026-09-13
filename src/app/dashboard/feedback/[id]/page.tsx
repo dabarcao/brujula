@@ -301,7 +301,7 @@ export default async function FeedbackRequestPage({
   const { data: request } = await supabase
     .from("feedback_requests")
     .select(
-      "id, created_at, requester_member_id, request_type, status, closes_at, name, feedback_cycles(name), ai_interpretation"
+      "id, created_at, requester_member_id, request_type, status, closes_at, name, feedback_cycles(name), ai_interpretation, ai_saboteadores_text, ai_open_answers_text"
     )
     .eq("id", id)
     .maybeSingle();
@@ -568,9 +568,7 @@ export default async function FeedbackRequestPage({
               <div className="mb-8 border rounded-lg p-4 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500 mb-2">
                   Interpretación de tu perfil{" "}
-                  <span className="font-normal text-gray-400">
-                    (generado por IA, competencias y saboteadores juntos)
-                  </span>
+                  <span className="font-normal text-gray-400">(generado por IA)</span>
                 </p>
                 <div className="text-sm text-gray-700 flex flex-col gap-3 whitespace-pre-line">
                   {request.ai_interpretation}
@@ -582,7 +580,29 @@ export default async function FeedbackRequestPage({
             ) : (
               <CompetencyNarrativeReport rows={competencyNarrative} />
             )}
+            {isCycle && showRestrictedContent && request.ai_saboteadores_text && (
+              <div className="mb-4 border rounded-lg p-4 bg-gray-50">
+                <p className="text-xs font-semibold text-gray-500 mb-2">
+                  Sobre tus saboteadores{" "}
+                  <span className="font-normal text-gray-400">(generado por IA)</span>
+                </p>
+                <div className="text-sm text-gray-700 flex flex-col gap-3 whitespace-pre-line">
+                  {request.ai_saboteadores_text}
+                </div>
+              </div>
+            )}
             {isCycle && showRestrictedContent && <SaboteadoresReport rows={saboteadores} />}
+            {isCycle && showRestrictedContent && request.ai_open_answers_text && (
+              <div className="mb-4 border rounded-lg p-4 bg-gray-50">
+                <p className="text-xs font-semibold text-gray-500 mb-2">
+                  Resumen de las respuestas abiertas{" "}
+                  <span className="font-normal text-gray-400">(generado por IA)</span>
+                </p>
+                <div className="text-sm text-gray-700 flex flex-col gap-3 whitespace-pre-line">
+                  {request.ai_open_answers_text}
+                </div>
+              </div>
+            )}
             <QuestionGroupList groups={peerGroups} />
           </>
         )}

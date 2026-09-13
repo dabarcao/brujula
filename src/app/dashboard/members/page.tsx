@@ -10,6 +10,7 @@ type MemberRow = {
   full_name: string | null;
   status: string;
   is_supervisor: boolean;
+  is_guest: boolean;
   department_id: string;
   invite_token: string;
   created_at: string;
@@ -61,7 +62,9 @@ export default async function MembersPage({
 
   const { data: members } = await supabase
     .from("members")
-    .select("id, email, full_name, status, is_supervisor, department_id, invite_token, created_at")
+    .select(
+      "id, email, full_name, status, is_supervisor, is_guest, department_id, invite_token, created_at"
+    )
     .order("created_at");
 
   const { data: departments } = await supabase
@@ -147,6 +150,11 @@ export default async function MembersPage({
             Invitar
           </button>
         </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" name="isGuest" />
+          Invitado — solo puede responder feedback cuando se lo pidan y ver la Biblioteca;
+          no puede pedir feedback ni tiene mapa de competencias propio.
+        </label>
       </form>
 
       <form action={createDepartment} className="flex gap-3 mb-8 items-center">
@@ -174,6 +182,11 @@ export default async function MembersPage({
             <div className="flex items-center gap-2">
               {member.is_supervisor && (
                 <span className="text-xs rounded-full bg-gray-100 px-2 py-1">admin</span>
+              )}
+              {member.is_guest && (
+                <span className="text-xs rounded-full bg-blue-50 text-blue-700 px-2 py-1">
+                  invitado
+                </span>
               )}
               <span
                 className={

@@ -55,7 +55,9 @@ export async function finalizeCycleRequest(formData: FormData) {
   if (result) {
     await supabase.rpc("save_ai_interpretation", {
       p_request_id: requestId,
-      p_text: result.interpretation,
+      p_text: result.competencias,
+      p_saboteadores_text: result.saboteadores,
+      p_open_answers_text: result.resumenAbiertas,
     });
   }
 

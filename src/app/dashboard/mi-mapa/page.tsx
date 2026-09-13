@@ -136,7 +136,7 @@ export default async function MiMapaDeCompetenciasPage() {
                         />
                         <span className="flex-1">{a.name}</span>
                         <span className="text-red-600 font-medium tabular-nums">
-                          {a.mentionDelta}
+                          {Math.abs(a.mentionDelta)}
                         </span>
                       </li>
                     ))}
