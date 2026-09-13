@@ -12,6 +12,7 @@ import EvaluatorPicker from "@/components/EvaluatorPicker";
 import CompetencyComparisonChart from "@/components/CompetencyComparisonChart";
 import { GROUP_COLORS, GROUP_LABELS } from "@/components/CompetencyRadar";
 import { SABOTEADOR_LABELS } from "@/lib/aiInterpretation";
+import InterpretationText from "@/components/InterpretationText";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -386,6 +387,19 @@ export default async function FeedbackRequestPage({
     : { data: null };
   const saboteadores = (saboteadoresData as SaboteadorRow[] | null) || [];
 
+  // Para resaltar cada mención de una competencia dentro del texto de la
+  // interpretación por IA, con su descripción real como tooltip —
+  // mismo dato que ya usa la Biblioteca, sin duplicar el texto.
+  const { data: competencyFrameworksData } =
+    isCycle && showRestrictedContent && (request.ai_interpretation || request.ai_saboteadores_text)
+      ? await supabase.from("competency_frameworks").select("name, description")
+      : { data: null };
+  const competencyDescriptions = (
+    (competencyFrameworksData as { name: string; description: string | null }[] | null) || []
+  )
+    .filter((c): c is { name: string; description: string } => Boolean(c.description))
+    .map((c) => ({ name: c.name, description: c.description }));
+
   const isAdHocOpen = request.request_type === "ad_hoc" && request.status === "open";
   const canManage = isAdHocOpen && totalResponseCount === 0;
 
@@ -570,8 +584,11 @@ export default async function FeedbackRequestPage({
                   Interpretación de tu perfil{" "}
                   <span className="font-normal text-gray-400">(generado por IA)</span>
                 </p>
-                <div className="text-sm text-gray-700 flex flex-col gap-3 whitespace-pre-line">
-                  {request.ai_interpretation}
+                <div className="text-sm text-gray-700">
+                  <InterpretationText
+                    text={request.ai_interpretation}
+                    competencies={competencyDescriptions}
+                  />
                 </div>
               </div>
             )}
@@ -586,8 +603,11 @@ export default async function FeedbackRequestPage({
                   Sobre tus saboteadores{" "}
                   <span className="font-normal text-gray-400">(generado por IA)</span>
                 </p>
-                <div className="text-sm text-gray-700 flex flex-col gap-3 whitespace-pre-line">
-                  {request.ai_saboteadores_text}
+                <div className="text-sm text-gray-700">
+                  <InterpretationText
+                    text={request.ai_saboteadores_text}
+                    competencies={competencyDescriptions}
+                  />
                 </div>
               </div>
             )}
@@ -598,8 +618,11 @@ export default async function FeedbackRequestPage({
                   Resumen de las respuestas abiertas{" "}
                   <span className="font-normal text-gray-400">(generado por IA)</span>
                 </p>
-                <div className="text-sm text-gray-700 flex flex-col gap-3 whitespace-pre-line">
-                  {request.ai_open_answers_text}
+                <div className="text-sm text-gray-700">
+                  <InterpretationText
+                    text={request.ai_open_answers_text}
+                    competencies={competencyDescriptions}
+                  />
                 </div>
               </div>
             )}
