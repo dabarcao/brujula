@@ -3,15 +3,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createIndividualCycleRequest } from "@/app/actions/cycles";
 import EmailEvaluatorPicker from "@/components/EmailEvaluatorPicker";
+import Onboarding360Wizard from "@/components/Onboarding360Wizard";
 import { EVALUATOR_CATEGORY_LABELS } from "@/lib/evaluatorCategories";
 import { getPlatformText } from "@/lib/platformTexts";
 
-export default async function NewIndividual360Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
+export default async function NewIndividual360Page() {
   const supabase = await createClient();
 
   const {
@@ -43,28 +39,6 @@ export default async function NewIndividual360Page({
     .eq("status", "open")
     .maybeSingle();
 
-  if (openRequest) {
-    return (
-      <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-semibold">Pedir feedback 360</h1>
-          <Link href="/dashboard" className="text-sm underline text-gray-600">
-            Volver al panel
-          </Link>
-        </div>
-        <p className="text-sm text-gray-600">
-          Ya tienes un 360 abierto. Espera a que termine antes de pedir otro.
-        </p>
-        <Link
-          href={`/dashboard/feedback/${openRequest.id}`}
-          className="inline-block mt-4 underline text-sm"
-        >
-          Ver mi 360 abierto
-        </Link>
-      </main>
-    );
-  }
-
   const { data: settings } = await supabase
     .from("platform_settings")
     .select("min_invitees_per_request")
@@ -77,11 +51,23 @@ export default async function NewIndividual360Page({
   tomorrow.setDate(tomorrow.getDate() + 1);
   const minClosesAt = tomorrow.toISOString().slice(0, 10);
 
-  const introText = await getPlatformText(
-    supabase,
-    "individual_360_intro",
-    `El cuestionario completo de 360º (las 14 competencias) más tu propia autoevaluación. Escribe el email de al menos ${minInvitees} personas. Nadie sabrá qué respondió quién, y no verás nada hasta que respondan al menos 3.`
-  );
+  const [introText, seleccionText, confirmacionText] = await Promise.all([
+    getPlatformText(
+      supabase,
+      "onboarding_360_intro",
+      "Vas a pedirle a las personas que te rodean que te cuenten qué impacto tienes en ellas. Es anónimo e información, no una evaluación de desempeño."
+    ),
+    getPlatformText(
+      supabase,
+      "onboarding_360_seleccion",
+      `Escribe el email de al menos ${minInvitees} personas y clasifícalas según su relación contigo. Nadie sabrá qué respondió quién.`
+    ),
+    getPlatformText(
+      supabase,
+      "onboarding_360_confirmacion",
+      "En cuanto confirmes tu selección, cada persona recibirá automáticamente un email de invitación con el enlace para responder."
+    ),
+  ]);
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
@@ -92,13 +78,23 @@ export default async function NewIndividual360Page({
         </Link>
       </div>
 
-      <p className="text-sm text-gray-600 mb-6">{introText}</p>
-
-      {error && (
-        <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
-      )}
-
-      <form action={createIndividualCycleRequest} className="flex flex-col gap-4">
+      <Onboarding360Wizard
+        introText={introText}
+        seleccionText={seleccionText}
+        confirmacionText={confirmacionText}
+        action={createIndividualCycleRequest}
+        alreadyDone={Boolean(openRequest)}
+        alreadyDoneContent={
+          <div className="text-sm text-gray-600">
+            <p className="mb-4">
+              Ya tienes un 360 abierto. Espera a que termine antes de pedir otro.
+            </p>
+            <Link href={`/dashboard/feedback/${openRequest?.id}`} className="underline">
+              Ver mi 360 abierto
+            </Link>
+          </div>
+        }
+      >
         <label className="flex flex-col gap-1 text-sm">
           Nombre para identificar este 360 (se mostrará como &ldquo;Ciclo 360{" "}
           {"{tu nombre}"}&rdquo;)
@@ -129,7 +125,7 @@ export default async function NewIndividual360Page({
           categoryOptions={EVALUATOR_CATEGORY_LABELS}
           categoryDefaultValue="team"
         />
-      </form>
+      </Onboarding360Wizard>
     </main>
   );
 }

@@ -2,11 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CompetencyModelDiagram from "@/components/CompetencyModelDiagram";
+import { FormattedInline } from "@/components/FormattedText";
+import { getPlatformText } from "@/lib/platformTexts";
 
 type FrameworkRow = {
   code: string;
   name: string;
   description: string | null;
+  threshold_high: string | null;
+  threshold_low: string | null;
   role: { code: string } | null;
 };
 
@@ -28,7 +32,7 @@ export default async function BibliotecaPage() {
 
   const { data: frameworksData } = await supabase
     .from("competency_frameworks")
-    .select("code, name, description, role:competency_roles(code)")
+    .select("code, name, description, threshold_high, threshold_low, role:competency_roles(code)")
     .order("name");
 
   const { data: plenitudData } = await supabase
@@ -43,11 +47,19 @@ export default async function BibliotecaPage() {
     .eq("code", "organizacion_teal")
     .maybeSingle();
 
+  const introText = await getPlatformText(
+    supabase,
+    "biblioteca_intro",
+    "El modelo de competencias de Brújula: Plenitud y los cuatro roles VACC, con las 16 competencias que los componen."
+  );
+
   const roles = (rolesData as { code: string; name: string; description: string | null }[]) || [];
   const frameworks = ((frameworksData as unknown as FrameworkRow[]) || []).map((f) => ({
     code: f.code,
     name: f.name,
     description: f.description,
+    thresholdHigh: f.threshold_high,
+    thresholdLow: f.threshold_low,
     groupCode: f.role?.code || "plenitud",
   }));
 
@@ -60,8 +72,7 @@ export default async function BibliotecaPage() {
         </Link>
       </div>
       <p className="text-sm text-gray-500 mb-6">
-        El modelo de competencias de Brújula: Plenitud y los cuatro roles VACC, con las 15
-        competencias que los componen.
+        <FormattedInline text={introText} />
       </p>
 
       <CompetencyModelDiagram

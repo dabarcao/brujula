@@ -1,0 +1,127 @@
+-- Brújula — arregla un bug real introducido en 0083 (desactivar
+-- saboteadores): get_responder_context ya no las muestra a quien
+-- responde, pero submit_feedback_response seguía exigiéndolas en su
+-- comprobación de "faltan respuestas obligatorias" (no miraba la columna
+-- `active` nueva) — cualquier autoevaluación real fallaba con "Faltan
+-- respuestas obligatorias" al no poder responder preguntas que ya no se
+-- le mostraban. Detectado al sembrar un perfil de prueba para probar la
+-- llamada real a la IA. Mismo tipo de retorno (uuid), no hace falta drop
+-- function.
+
+create or replace function submit_feedback_response(p_token uuid, p_answers jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  invitation feedback_invitations;
+  invitee members;
+  is_self_response boolean;
+  request_template_id uuid;
+  new_response_id uuid;
+  answer jsonb;
+  missing_required integer;
+  foreign_answers integer;
+  invalid_competency_answers integer;
+  q_id uuid;
+  q_max integer;
+  selected_count integer;
+begin
+  select * into invitation from feedback_invitations where token = p_token and used_at is null;
+
+  if invitation is null then
+    raise exception 'Invitación no válida o ya utilizada.';
+  end if;
+
+  if invitation.invitee_member_id is not null then
+    select * into invitee from members where id = invitation.invitee_member_id;
+    if invitee.auth_user_id is distinct from auth.uid() then
+      raise exception 'Esta invitación no corresponde a tu usuario.';
+    end if;
+  end if;
+
+  is_self_response := coalesce(invitation.evaluator_category = 'self', false);
+
+  select fr.template_id
+    into request_template_id
+  from feedback_requests fr
+  where fr.id = invitation.feedback_request_id;
+
+  select count(*) into foreign_answers
+  from jsonb_array_elements(p_answers) a
+  where not exists (
+    select 1 from survey_questions sq
+    where sq.id = (a->>'question_id')::uuid
+      and sq.template_id = request_template_id
+  );
+
+  if foreign_answers > 0 then
+    raise exception 'Alguna respuesta no corresponde a la plantilla de esta solicitud.';
+  end if;
+
+  select count(*) into invalid_competency_answers
+  from jsonb_array_elements(p_answers) a
+  where (a->>'competency_code') is not null
+    and not exists (select 1 from competency_frameworks cf where cf.code = a->>'competency_code');
+
+  if invalid_competency_answers > 0 then
+    raise exception 'Alguna respuesta hace referencia a una competencia que no existe.';
+  end if;
+
+  for q_id, q_max in
+    select sq.id, sq.max_selections
+    from survey_questions sq
+    where sq.template_id = request_template_id and sq.max_selections is not null
+  loop
+    select count(distinct a->>'competency_code') into selected_count
+    from jsonb_array_elements(p_answers) a
+    where (a->>'question_id')::uuid = q_id
+      and (a->>'competency_code') is not null;
+
+    if selected_count > q_max then
+      raise exception 'Se ha elegido más competencias de las permitidas en alguna pregunta.';
+    end if;
+  end loop;
+
+  select count(*) into missing_required
+  from survey_questions sq
+  where sq.template_id = request_template_id
+    and sq.required
+    and sq.active
+    and not (is_self_response and sq.question_type = 'open')
+    and not (not is_self_response and sq.self_only)
+    and not exists (
+      select 1 from jsonb_array_elements(p_answers) a
+      where (a->>'question_id')::uuid = sq.id
+        and (
+          coalesce(trim(a->>'answer_text'), '') <> ''
+          or (a->>'answer_value') is not null
+        )
+    );
+
+  if missing_required > 0 then
+    raise exception 'Faltan respuestas obligatorias.';
+  end if;
+
+  insert into feedback_responses (feedback_request_id, is_self, evaluator_category)
+  values (invitation.feedback_request_id, is_self_response, invitation.evaluator_category)
+  returning id into new_response_id;
+
+  for answer in select * from jsonb_array_elements(p_answers)
+  loop
+    insert into feedback_answers (feedback_response_id, question_id, answer_text, answer_value, competency_code)
+    values (
+      new_response_id,
+      (answer->>'question_id')::uuid,
+      answer->>'answer_text',
+      nullif(answer->>'answer_value', '')::numeric,
+      answer->>'competency_code'
+    );
+  end loop;
+
+  update feedback_invitations set used_at = now() where id = invitation.id;
+
+  return new_response_id;
+end;
+$$;

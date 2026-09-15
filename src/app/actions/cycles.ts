@@ -65,7 +65,17 @@ export async function finalizeCycleRequest(formData: FormData) {
   redirect(`/dashboard/feedback/${requestId}`);
 }
 
-export async function organizeCycleEvaluators(formData: FormData) {
+// Devuelven el resultado en vez de redirigir: el asistente de onboarding
+// (Onboarding360Wizard) necesita quedarse en el paso de selección para
+// mostrar el error, o pasar al paso de confirmación tras el éxito, sin que
+// una redirección de servidor le arrebate el control de en qué pantalla
+// está el usuario.
+type EvaluatorActionState = { error: string } | { success: true };
+
+export async function organizeCycleEvaluators(
+  _prevState: EvaluatorActionState | null,
+  formData: FormData
+): Promise<EvaluatorActionState> {
   const cycleId = String(formData.get("cycleId") || "");
   const evaluatorIds = formData.getAll("evaluatorId").map(String);
   const categories = evaluatorIds.map((id) => String(formData.get(`category_${id}`) || ""));
@@ -79,14 +89,17 @@ export async function organizeCycleEvaluators(formData: FormData) {
   });
 
   if (error) {
-    redirect(`/dashboard/cycles/${cycleId}?error=` + encodeURIComponent(error.message));
+    return { error: error.message };
   }
 
   revalidatePath("/dashboard");
-  redirect("/dashboard?cycleOrganized=1");
+  return { success: true };
 }
 
-export async function createIndividualCycleRequest(formData: FormData) {
+export async function createIndividualCycleRequest(
+  _prevState: EvaluatorActionState | null,
+  formData: FormData
+): Promise<EvaluatorActionState> {
   const evaluatorEmails = formData.getAll("evaluatorEmails").map(String);
   const categories = evaluatorEmails.map((email) => String(formData.get(`category_${email}`) || ""));
   const closesAt = String(formData.get("closesAt") || "");
@@ -102,11 +115,11 @@ export async function createIndividualCycleRequest(formData: FormData) {
   });
 
   if (error) {
-    redirect("/dashboard/feedback/nueva-360?error=" + encodeURIComponent(error.message));
+    return { error: error.message };
   }
 
   revalidatePath("/dashboard");
-  redirect("/dashboard?requestCreated=1");
+  return { success: true };
 }
 
 export async function updateCycleRequestEvaluators(formData: FormData) {

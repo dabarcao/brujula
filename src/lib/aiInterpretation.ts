@@ -33,6 +33,13 @@ type OpenAnswerRow = {
   feedback_responses: { is_self: boolean } | null;
 };
 
+type FrameworkThresholdRow = {
+  code: string;
+  name: string;
+  threshold_high: string | null;
+  threshold_low: string | null;
+};
+
 // El modelo escribe las 3 partes en una sola llamada (más barato y más
 // coherente entre sí que 3 llamadas sueltas) pero separadas con
 // marcadores literales, para poder guardarlas y mostrarlas por separado
@@ -75,22 +82,32 @@ export async function generateAiInterpretation(
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
-  const [{ data: comparisonData }, { data: byCategoryData }, { data: saboteadoresData }, { data: openAnswersData }] =
-    await Promise.all([
-      supabase.rpc("get_request_competency_comparison", { p_request_id: requestId }),
-      supabase.rpc("get_request_competency_by_category", { p_request_id: requestId }),
-      supabase.rpc("get_request_saboteadores", { p_request_id: requestId }),
-      // Mismo dato que ya se muestra tal cual en el informe (QuestionGroupList,
-      // feedback/[id]/page.tsx) — no hace falta ninguna RPC nueva, el mismo
-      // supabase client de aquí ya tiene el contexto de sesión necesario.
-      supabase
-        .from("feedback_answers")
-        .select(
-          "answer_text, survey_questions(prompt, position, question_type), feedback_responses!inner(feedback_request_id, is_self)"
-        )
-        .eq("feedback_responses.feedback_request_id", requestId)
-        .eq("feedback_responses.is_self", false),
-    ]);
+  const [
+    { data: comparisonData },
+    { data: byCategoryData },
+    { data: saboteadoresData },
+    { data: openAnswersData },
+    { data: thresholdsData },
+  ] = await Promise.all([
+    supabase.rpc("get_request_competency_comparison", { p_request_id: requestId }),
+    supabase.rpc("get_request_competency_by_category", { p_request_id: requestId }),
+    supabase.rpc("get_request_saboteadores", { p_request_id: requestId }),
+    // Mismo dato que ya se muestra tal cual en el informe (QuestionGroupList,
+    // feedback/[id]/page.tsx) — no hace falta ninguna RPC nueva, el mismo
+    // supabase client de aquí ya tiene el contexto de sesión necesario.
+    supabase
+      .from("feedback_answers")
+      .select(
+        "answer_text, survey_questions(prompt, position, question_type), feedback_responses!inner(feedback_request_id, is_self)"
+      )
+      .eq("feedback_responses.feedback_request_id", requestId)
+      .eq("feedback_responses.is_self", false),
+    // Umbrales (qué indica un valor alto/bajo, migración 0078) — se pasan
+    // siempre los 16, no solo los que salgan mencionados en el resto del
+    // prompt, porque es la propia IA quien decide qué competencias
+    // destacar en los puntos 1-4 de más abajo.
+    supabase.from("competency_frameworks").select("code, name, threshold_high, threshold_low"),
+  ]);
 
   const comparison = (comparisonData as ComparisonRow[] | null) || [];
   if (comparison.length === 0) return null;
@@ -137,11 +154,23 @@ export async function generateAiInterpretation(
     openByPrompt.get(key)!.push(row.answer_text);
   }
 
+  const thresholdLines = ((thresholdsData as FrameworkThresholdRow[] | null) || [])
+    .filter((t) => t.threshold_high || t.threshold_low)
+    .map(
+      (t) =>
+        `- ${t.name}: valor alto = ${t.threshold_high || "sin dato"}; valor bajo = ${t.threshold_low || "sin dato"}`
+    )
+    .join("\n");
+
   let prompt = `Eres un asistente que ayuda a interpretar el perfil de un informe de feedback 360 en Brújula, una herramienta de feedback anónimo humanista (no de evaluación de desempeño).
 
 Datos de competencias (escala 1-5, "sin dato" cuando no aplica):
 ${lines.join("\n")}
-
+${
+  thresholdLines
+    ? `\nPara referencia (qué indica un valor alto o bajo en cada competencia — úsalo para calibrar el tono de la interpretación, no lo copies literalmente ni lo cites como lista):\n${thresholdLines}\n`
+    : ""
+}
 Escribe una interpretación en español, en 2ª persona ("tú"), en 3-4 párrafos cortos, con este contenido:
 1. Qué destaca según la media de compañeros (2-3 competencias con nota más alta).
 2. Los mayores gaps entre autoevaluación y media de compañeros, en ambos sentidos (te ves mejor o peor de lo que te ven) — como pregunta reflexiva, nunca como veredicto.

@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { GROUP_COLORS, GROUP_LABELS, GROUP_ORDER } from "@/components/CompetencyRadar";
+import { FormattedInline, FormattedParagraphs } from "@/components/FormattedText";
 
 type Framework = {
   code: string;
   name: string;
   description: string | null;
+  thresholdHigh: string | null;
+  thresholdLow: string | null;
   groupCode: string;
 };
 
@@ -99,19 +102,38 @@ export default function CompetencyModelDiagram({
   const roleByCode = new Map(roles.map((r) => [r.code, r]));
 
   const selectedInfo = (() => {
+    // thresholdHigh/thresholdLow van siempre en el objeto (null cuando no
+    // aplica, framework/grupo) — para que las tres ramas devuelvan la
+    // misma forma y el render de abajo no tenga que distinguir casos.
     if (!selected) return null;
     if (selected.kind === "framework") {
-      return frameworkIntro ? { name: frameworkIntro.name, description: frameworkIntro.description } : null;
+      return frameworkIntro
+        ? {
+            name: frameworkIntro.name,
+            description: frameworkIntro.description,
+            thresholdHigh: null,
+            thresholdLow: null,
+          }
+        : null;
     }
     if (selected.kind === "group") {
       if (selected.code === "plenitud") {
-        return { name: "Plenitud", description: plenitudDescription };
+        return { name: "Plenitud", description: plenitudDescription, thresholdHigh: null, thresholdLow: null };
       }
       const role = roleByCode.get(selected.code);
-      return role ? { name: role.name, description: role.description || "" } : null;
+      return role
+        ? { name: role.name, description: role.description || "", thresholdHigh: null, thresholdLow: null }
+        : null;
     }
     const fw = frameworks.find((f) => f.code === selected.code);
-    return fw ? { name: fw.name, description: fw.description || "" } : null;
+    return fw
+      ? {
+          name: fw.name,
+          description: fw.description || "",
+          thresholdHigh: fw.thresholdHigh,
+          thresholdLow: fw.thresholdLow,
+        }
+      : null;
   })();
 
   return (
@@ -229,7 +251,25 @@ export default function CompetencyModelDiagram({
         {selectedInfo ? (
           <>
             <p className="text-sm font-semibold mb-1.5">{selectedInfo.name}</p>
-            <p className="text-sm text-gray-700">{selectedInfo.description}</p>
+            <div className="flex flex-col gap-2 text-sm text-gray-700">
+              <FormattedParagraphs text={selectedInfo.description} />
+            </div>
+            {(selectedInfo.thresholdHigh || selectedInfo.thresholdLow) && (
+              <div className="mt-3 flex flex-col gap-2">
+                {selectedInfo.thresholdHigh && (
+                  <p className="text-sm text-gray-700">
+                    <span className="font-bold text-gray-900">Valor alto: </span>
+                    <FormattedInline text={selectedInfo.thresholdHigh} />
+                  </p>
+                )}
+                {selectedInfo.thresholdLow && (
+                  <p className="text-sm text-gray-700">
+                    <span className="font-bold text-gray-900">Valor bajo: </span>
+                    <FormattedInline text={selectedInfo.thresholdLow} />
+                  </p>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <p className="text-sm text-gray-500">

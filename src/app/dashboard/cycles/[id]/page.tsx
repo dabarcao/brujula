@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { organizeCycleEvaluators } from "@/app/actions/cycles";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
+import Onboarding360Wizard from "@/components/Onboarding360Wizard";
 import { EVALUATOR_CATEGORY_LABELS } from "@/lib/evaluatorCategories";
+import { getPlatformText } from "@/lib/platformTexts";
 
 type ColleagueRow = {
   id: string;
@@ -13,13 +15,10 @@ type ColleagueRow = {
 
 export default async function CyclePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
 }) {
   const { id } = await params;
-  const { error } = await searchParams;
   const supabase = await createClient();
 
   const {
@@ -85,6 +84,24 @@ export default async function CyclePage({
 
   const minInvitees = settings?.min_invitees_per_request ?? 5;
 
+  const [introText, seleccionText, confirmacionText] = await Promise.all([
+    getPlatformText(
+      supabase,
+      "onboarding_360_intro",
+      "Vas a pedirle a las personas que te rodean que te cuenten qué impacto tienes en ellas. Es anónimo e información, no una evaluación de desempeño."
+    ),
+    getPlatformText(
+      supabase,
+      "onboarding_360_seleccion",
+      "Elige a tus evaluadores y clasifícalos según su relación contigo. Tu autoevaluación se añade automáticamente."
+    ),
+    getPlatformText(
+      supabase,
+      "onboarding_360_confirmacion",
+      "En cuanto confirmes tu selección, cada persona recibirá automáticamente un email de invitación con el enlace para responder."
+    ),
+  ]);
+
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
@@ -103,43 +120,34 @@ export default async function CyclePage({
           Este ciclo no está abierto actualmente (del {cycle.opens_at} al{" "}
           {cycle.closes_at}).
         </p>
-      ) : existingRequest ? (
-        <div className="text-sm text-gray-600">
-          <p className="mb-3">Ya has organizado tus evaluadores para este ciclo.</p>
-          <Link
-            href={`/dashboard/feedback/${existingRequest.id}`}
-            className="underline"
-          >
-            Ver el progreso de tus respuestas
-          </Link>
-        </div>
       ) : (
-        <>
-          <p className="text-sm text-gray-600 mb-6">
-            Elige a tus evaluadores y clasifícalos según su relación contigo.
-            Tu autoevaluación se añade automáticamente. Nadie sabrá qué
-            respondió quién, y no verás nada hasta que respondan suficientes
-            personas.
-          </p>
+        <Onboarding360Wizard
+          introText={introText}
+          seleccionText={seleccionText}
+          confirmacionText={confirmacionText}
+          action={organizeCycleEvaluators}
+          alreadyDone={Boolean(existingRequest)}
+          alreadyDoneContent={
+            <div className="text-sm text-gray-600">
+              <p className="mb-3">Ya has organizado tus evaluadores para este ciclo.</p>
+              <Link href={`/dashboard/feedback/${existingRequest?.id}`} className="underline">
+                Ver el progreso de tus respuestas
+              </Link>
+            </div>
+          }
+        >
+          <input type="hidden" name="cycleId" value={id} />
 
-          {error && (
-            <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
-          )}
-
-          <form action={organizeCycleEvaluators} className="flex flex-col gap-4">
-            <input type="hidden" name="cycleId" value={id} />
-
-            <EvaluatorPicker
-              colleagues={(colleagues as ColleagueRow[] | null) || []}
-              checkboxName="evaluatorId"
-              categoryOptions={EVALUATOR_CATEGORY_LABELS}
-              categoryDefaultValue="team"
-              minSelected={minInvitees}
-              submitLabel="Confirmar evaluadores"
-              primary
-            />
-          </form>
-        </>
+          <EvaluatorPicker
+            colleagues={(colleagues as ColleagueRow[] | null) || []}
+            checkboxName="evaluatorId"
+            categoryOptions={EVALUATOR_CATEGORY_LABELS}
+            categoryDefaultValue="team"
+            minSelected={minInvitees}
+            submitLabel="Confirmar evaluadores"
+            primary
+          />
+        </Onboarding360Wizard>
       )}
     </main>
   );

@@ -27,6 +27,19 @@ export default function InterpretationText({
   const paragraphs = text.split("\n").map((paragraph, pIndex) => {
     if (paragraph.trim() === "") return <br key={`br-${pIndex}`} />;
 
+    // A veces el modelo pone un título markdown ("# ...") aunque el
+    // prompt le pide que no lo haga — no interpretamos markdown de
+    // verdad aquí, así que en vez de mostrar la almohadilla suelta, la
+    // línea completa se trata como negrita.
+    const headingMatch = paragraph.match(/^#+\s*(.+)$/);
+    if (headingMatch) {
+      return (
+        <p key={pIndex}>
+          <strong>{headingMatch[1]}</strong>
+        </p>
+      );
+    }
+
     // Un único regex con todos los nombres alternados, para partir el
     // párrafo respetando el orden en que aparecen — sin esto, resaltar
     // uno a uno reprocesaría el texto ya resaltado del anterior.
