@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { generateAiInterpretation } from "@/lib/aiInterpretation";
-import { sendInvitationEmails } from "@/lib/invitationEmails";
+import { sendInvitationEmails, sendInvitationEmailsForNewInvitees } from "@/lib/invitationEmails";
 
 export async function createFeedbackCycle(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
@@ -138,7 +138,7 @@ export async function updateCycleRequestEvaluators(formData: FormData) {
 
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("update_cycle_request_evaluators", {
+  const { data: newInvites, error } = await supabase.rpc("update_cycle_request_evaluators", {
     p_request_id: requestId,
     p_evaluator_member_ids: evaluatorIds,
     p_evaluator_categories: categories,
@@ -148,6 +148,19 @@ export async function updateCycleRequestEvaluators(formData: FormData) {
     redirect(
       `/dashboard/feedback/${requestId}/gestionar?error=` + encodeURIComponent(error.message)
     );
+  }
+
+  if (newInvites && newInvites.length > 0) {
+    const memberIds = newInvites.map((n: { invitee_member_id: string }) => n.invitee_member_id);
+    const { data: newMembers } = await supabase.from("members").select("id, email").in("id", memberIds);
+    const emailById = new Map((newMembers || []).map((m) => [m.id, m.email]));
+    const invitees = newInvites
+      .map((n: { invitee_member_id: string; token: string }) => ({
+        email: emailById.get(n.invitee_member_id),
+        token: n.token,
+      }))
+      .filter((i: { email?: string; token: string }): i is { email: string; token: string } => !!i.email);
+    await sendInvitationEmailsForNewInvitees(supabase, requestId, invitees);
   }
 
   revalidatePath("/dashboard");
@@ -161,15 +174,29 @@ export async function updateIndividualCycleRequestEvaluators(formData: FormData)
 
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("update_individual_cycle_request_evaluators", {
-    p_request_id: requestId,
-    p_evaluator_emails: evaluatorEmails,
-    p_evaluator_categories: categories,
-  });
+  const { data: newInvites, error } = await supabase.rpc(
+    "update_individual_cycle_request_evaluators",
+    {
+      p_request_id: requestId,
+      p_evaluator_emails: evaluatorEmails,
+      p_evaluator_categories: categories,
+    }
+  );
 
   if (error) {
     redirect(
       `/dashboard/feedback/${requestId}/gestionar?error=` + encodeURIComponent(error.message)
+    );
+  }
+
+  if (newInvites && newInvites.length > 0) {
+    await sendInvitationEmailsForNewInvitees(
+      supabase,
+      requestId,
+      newInvites.map((n: { invitee_email: string; token: string }) => ({
+        email: n.invitee_email,
+        token: n.token,
+      }))
     );
   }
 

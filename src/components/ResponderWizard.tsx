@@ -40,27 +40,62 @@ export default function ResponderWizard({
   competencies: CompetencyOption[];
 }) {
   const [step, setStep] = useState(0);
+  const [stepError, setStepError] = useState<string | null>(null);
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
   const total = questions.length;
   const isReview = step === total;
 
+  // Antes esto solo comprobaba las preguntas abiertas (con `required`
+  // nativo del navegador) — las de escala y "competencia" dejaban
+  // avanzar sin responder, y el aviso de "falta esta respuesta" solo
+  // llegaba al final, en el envío al servidor. Como ese envío es un
+  // único formulario que recarga la página entera al fallar (redirect
+  // del Server Action), todo lo ya rellenado se perdía y había que
+  // volver a empezar. Ahora se valida cada pregunta obligatoria antes
+  // de dejar avanzar, para que ese envío fallido casi nunca llegue a
+  // pasar.
   function goNext() {
-    // Solo se puede validar de verdad lo que el propio navegador sabe
-    // comprobar (las abiertas, con `required` nativo) — las de escala y
-    // "competencia" siguen dependiendo de la validación del servidor
-    // (submit_feedback_response), igual que en el formulario de una sola
-    // página de antes: no es una regresión, nunca hubo aviso previo ahí.
+    const question = questions[step];
     const stepEl = stepRefs.current[step];
-    if (stepEl) {
-      const fields = stepEl.querySelectorAll<HTMLTextAreaElement>("textarea[required]");
-      for (const field of Array.from(fields)) {
-        if (!field.reportValidity()) return;
+
+    if (question.required && stepEl) {
+      if (question.question_type === "open") {
+        const field = stepEl.querySelector<HTMLTextAreaElement>("textarea[required]");
+        if (field && !field.reportValidity()) return;
+      } else if (question.question_type === "scale") {
+        const field = stepEl.querySelector<HTMLInputElement>(
+          `input[type="hidden"][name="answer_${question.id}"]`
+        );
+        if (!field?.value) {
+          setStepError("Desliza la barra para responder antes de continuar.");
+          return;
+        }
+      } else if (question.question_type === "competency") {
+        const selected = stepEl.querySelectorAll<HTMLInputElement>(
+          `input[type="hidden"][name="competency_${question.id}"]`
+        );
+        if (selected.length === 0) {
+          setStepError("Elige al menos una competencia antes de continuar.");
+          return;
+        }
+        for (const sel of Array.from(selected)) {
+          const valueField = stepEl.querySelector<HTMLInputElement>(
+            `input[type="hidden"][name="competency_value_${question.id}_${sel.value}"]`
+          );
+          if (!valueField?.value) {
+            setStepError("Desliza la barra de cada competencia elegida antes de continuar.");
+            return;
+          }
+        }
       }
     }
+
+    setStepError(null);
     setStep((s) => Math.min(s + 1, total));
   }
 
   function goBack() {
+    setStepError(null);
     setStep((s) => Math.max(s - 1, 0));
   }
 
@@ -127,6 +162,8 @@ export default function ResponderWizard({
           falta alguna respuesta obligatoria, te lo diremos antes de guardar nada.
         </p>
       )}
+
+      {stepError && <p className="text-sm text-red-700">{stepError}</p>}
 
       <div className="flex items-center justify-between">
         <button

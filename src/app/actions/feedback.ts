@@ -3,7 +3,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { sendInvitationEmails, sendThankYouEmail } from "@/lib/invitationEmails";
+import {
+  sendInvitationEmails,
+  sendInvitationEmailsForNewInvitees,
+  sendThankYouEmail,
+} from "@/lib/invitationEmails";
 
 export async function createFeedbackRequest(formData: FormData) {
   const inviteeIds = formData.getAll("inviteeIds").map(String);
@@ -98,13 +102,29 @@ export async function updateFeedbackRequestEvaluators(formData: FormData) {
 
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("update_ad_hoc_feedback_request_evaluators", {
-    p_request_id: requestId,
-    p_invitee_member_ids: inviteeIds,
-  });
+  const { data: newInvites, error } = await supabase.rpc(
+    "update_ad_hoc_feedback_request_evaluators",
+    {
+      p_request_id: requestId,
+      p_invitee_member_ids: inviteeIds,
+    }
+  );
 
   if (error) {
     redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
+  }
+
+  if (newInvites && newInvites.length > 0) {
+    const memberIds = newInvites.map((n: { invitee_member_id: string }) => n.invitee_member_id);
+    const { data: newMembers } = await supabase.from("members").select("id, email").in("id", memberIds);
+    const emailById = new Map((newMembers || []).map((m) => [m.id, m.email]));
+    const invitees = newInvites
+      .map((n: { invitee_member_id: string; token: string }) => ({
+        email: emailById.get(n.invitee_member_id),
+        token: n.token,
+      }))
+      .filter((i: { email?: string; token: string }): i is { email: string; token: string } => !!i.email);
+    await sendInvitationEmailsForNewInvitees(supabase, requestId, invitees);
   }
 
   revalidatePath("/dashboard");
@@ -117,13 +137,27 @@ export async function updateFeedbackRequestEvaluatorsForIndividual(formData: For
 
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("update_ad_hoc_feedback_request_evaluators_for_individual", {
-    p_request_id: requestId,
-    p_invitee_emails: inviteeEmails,
-  });
+  const { data: newInvites, error } = await supabase.rpc(
+    "update_ad_hoc_feedback_request_evaluators_for_individual",
+    {
+      p_request_id: requestId,
+      p_invitee_emails: inviteeEmails,
+    }
+  );
 
   if (error) {
     redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
+  }
+
+  if (newInvites && newInvites.length > 0) {
+    await sendInvitationEmailsForNewInvitees(
+      supabase,
+      requestId,
+      newInvites.map((n: { invitee_email: string; token: string }) => ({
+        email: n.invitee_email,
+        token: n.token,
+      }))
+    );
   }
 
   revalidatePath("/dashboard");

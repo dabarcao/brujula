@@ -9,17 +9,18 @@ import { getPlatformText } from "@/lib/platformTexts";
 // envuelve. No se le manda email a la invitación "self" — quien acaba de
 // crear la solicitud ya sabe que tiene que autoevaluarse, un aviso en
 // ese momento sería redundante.
-export async function sendInvitationEmails(
-  supabase: SupabaseClient,
-  requestId: string
-): Promise<void> {
+// Junta lo que necesitan tanto el envío inicial como el de "añadir más
+// evaluadores": nombre de quien pide el feedback + plantillas ya
+// interpoladas. null si la solicitud no existe (no debería pasar salvo
+// carrera rara, pero mejor no reventar el envío por eso).
+async function buildInvitationEmailContext(supabase: SupabaseClient, requestId: string) {
   const { data: request } = await supabase
     .from("feedback_requests")
     .select("requester_member_id")
     .eq("id", requestId)
     .maybeSingle();
 
-  if (!request) return;
+  if (!request) return null;
 
   const { data: requester } = await supabase
     .from("members")
@@ -28,14 +29,6 @@ export async function sendInvitationEmails(
     .maybeSingle();
 
   const requesterName = requester?.full_name || requester?.email || "Alguien";
-
-  const { data: invitations } = await supabase
-    .from("feedback_invitations")
-    .select("token, invitee_email, invitee_member_id, evaluator_category, members(email)")
-    .eq("feedback_request_id", requestId)
-    .neq("evaluator_category", "self");
-
-  if (!invitations || invitations.length === 0) return;
 
   const [subjectTemplate, bodyTemplate] = await Promise.all([
     getPlatformText(supabase, "invitation_email_subject", "{nombre} te pide tu feedback"),
@@ -46,9 +39,27 @@ export async function sendInvitationEmails(
     ),
   ]);
 
-  const subject = subjectTemplate.replaceAll("{nombre}", requesterName);
-  const bodyHtml = markdownLiteToHtml(bodyTemplate.replaceAll("{nombre}", requesterName));
-  const siteUrl = getSiteUrl();
+  return {
+    subject: subjectTemplate.replaceAll("{nombre}", requesterName),
+    bodyHtml: markdownLiteToHtml(bodyTemplate.replaceAll("{nombre}", requesterName)),
+    siteUrl: getSiteUrl(),
+  };
+}
+
+export async function sendInvitationEmails(
+  supabase: SupabaseClient,
+  requestId: string
+): Promise<void> {
+  const { data: invitations } = await supabase
+    .from("feedback_invitations")
+    .select("token, invitee_email, invitee_member_id, evaluator_category, members(email)")
+    .eq("feedback_request_id", requestId)
+    .neq("evaluator_category", "self");
+
+  if (!invitations || invitations.length === 0) return;
+
+  const ctx = await buildInvitationEmailContext(supabase, requestId);
+  if (!ctx) return;
 
   for (const invite of (invitations as unknown as InvitationRow[] | null) || []) {
     const email = invite.invitee_email || invite.members?.email;
@@ -56,8 +67,33 @@ export async function sendInvitationEmails(
 
     await sendEmail({
       to: email,
-      subject,
-      html: invitationEmailHtml({ bodyHtml, link: `${siteUrl}/responder/${invite.token}` }),
+      subject: ctx.subject,
+      html: invitationEmailHtml({ bodyHtml: ctx.bodyHtml, link: `${ctx.siteUrl}/responder/${invite.token}` }),
+    });
+  }
+}
+
+// Se llama justo después de añadir más evaluadores a una solicitud ágil
+// ya existente — a diferencia de sendInvitationEmails, aquí la lista de
+// invitados ya viene decidida de antemano (solo los recién añadidos por
+// update_ad_hoc_feedback_request_evaluators[_for_individual], que ahora
+// solo inserta filas nuevas y nunca toca el token de quien ya estaba
+// invitado), así que no hace falta volver a consultar quién es "nuevo".
+export async function sendInvitationEmailsForNewInvitees(
+  supabase: SupabaseClient,
+  requestId: string,
+  invitees: { email: string; token: string }[]
+): Promise<void> {
+  if (invitees.length === 0) return;
+
+  const ctx = await buildInvitationEmailContext(supabase, requestId);
+  if (!ctx) return;
+
+  for (const { email, token } of invitees) {
+    await sendEmail({
+      to: email,
+      subject: ctx.subject,
+      html: invitationEmailHtml({ bodyHtml: ctx.bodyHtml, link: `${ctx.siteUrl}/responder/${token}` }),
     });
   }
 }

@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getPlatformText } from "@/lib/platformTexts";
 
 export async function acceptInviteSignUp(formData: FormData) {
   const token = String(formData.get("token") || "").trim();
@@ -32,12 +33,13 @@ export async function acceptInviteSignUp(formData: FormData) {
     redirect(`/invitacion/${token}?error=` + encodeURIComponent(signUpError.message));
   }
 
-  redirect(
-    "/login?message=" +
-      encodeURIComponent(
-        `Te hemos enviado un correo a ${email} para confirmar tu cuenta. Después de confirmarlo, inicia sesión para completar tu alta.`
-      )
+  const message = await getPlatformText(
+    supabase,
+    "signup_success_invite",
+    "Ya puedes iniciar sesión con tu email y tu contraseña para completar tu alta."
   );
+
+  redirect("/login?message=" + encodeURIComponent(message));
 }
 
 export async function individualSignUp(formData: FormData) {
@@ -67,12 +69,13 @@ export async function individualSignUp(formData: FormData) {
     redirect("/registro?error=" + encodeURIComponent(signUpError.message));
   }
 
-  redirect(
-    "/login?message=" +
-      encodeURIComponent(
-        `Te hemos enviado un correo a ${email} para confirmar tu cuenta. Después de confirmarlo, inicia sesión para empezar.`
-      )
+  const message = await getPlatformText(
+    supabase,
+    "signup_success_individual",
+    "Ya puedes iniciar sesión con tu email y tu contraseña para empezar."
   );
+
+  redirect("/login?message=" + encodeURIComponent(message));
 }
 
 export async function signIn(formData: FormData) {
