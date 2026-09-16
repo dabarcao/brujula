@@ -6,13 +6,17 @@ import {
   cancelFeedbackRequest,
   closeFeedbackRequest,
   updateFeedbackRequestEvaluators,
+  updateFeedbackRequestEvaluatorsForIndividual,
 } from "@/app/actions/feedback";
 import { finalizeCycleRequest } from "@/app/actions/cycles";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
+import EmailEvaluatorPicker from "@/components/EmailEvaluatorPicker";
 import CompetencyComparisonChart from "@/components/CompetencyComparisonChart";
 import { GROUP_COLORS, GROUP_LABELS } from "@/components/CompetencyRadar";
 import { SABOTEADOR_LABELS } from "@/lib/aiInterpretation";
 import InterpretationText from "@/components/InterpretationText";
+import FinalizeReportButton from "@/components/FinalizeReportButton";
+import { getPlatformText } from "@/lib/platformTexts";
 
 type FlatAnswerRow = {
   answer_text: string | null;
@@ -332,6 +336,24 @@ export default async function FeedbackRequestPage({
     .select("id", { count: "exact", head: true })
     .eq("feedback_request_id", id);
 
+  const [progressPendingMessage, progressSelfReminder, finalizeConfirmMessage] = await Promise.all([
+    getPlatformText(
+      supabase,
+      "progress_pending_message",
+      "Han respondido {respondidas} de {necesarias} necesarias para poder ver algo. Nadie sabe quién ha respondido ya."
+    ),
+    getPlatformText(
+      supabase,
+      "progress_pending_self_reminder",
+      "Además, hasta que no hagas tu propia autoevaluación tampoco podrás ver cómo te ven los demás."
+    ),
+    getPlatformText(
+      supabase,
+      "finalize_confirm_message",
+      "Si finalizas tu informe ahora, {pendientes} personas que todavía no han respondido no tendrán opción de hacerlo. ¿Seguro que quieres finalizarlo?"
+    ),
+  ]);
+
   const cycleClosesAt: string | null = request.closes_at ?? null;
 
   const isCycle = request.request_type === "cycle";
@@ -408,8 +430,15 @@ export default async function FeedbackRequestPage({
   // completa de si todavía se puede modificar algo.
   const canLinkToManageCycle = isCycle && request.status === "open" && !isFinal;
 
+  // Cuenta individual (invita por email suelto, sin compañeros que
+  // buscar) vs. empresa (invita eligiendo entre sus `members`) — dos
+  // formas de gestionar la misma sección "Gestionar solicitud".
+  const isIndividualAccount =
+    (currentMember?.organizations as unknown as { kind: string } | null)?.kind === "individual";
+
   let colleagues: ColleagueRow[] | null = null;
   let currentInviteeIds: string[] = [];
+  let currentInviteeEmails: string[] = [];
   let minInvitees = 5;
   if (canManage) {
     const { data: settings } = await supabase
@@ -419,22 +448,32 @@ export default async function FeedbackRequestPage({
       .maybeSingle();
     minInvitees = settings?.min_invitees_per_request ?? 5;
 
-    const { data: colleaguesData } = await supabase
-      .from("members")
-      .select("id, email, full_name")
-      .eq("status", "active")
-      .eq("is_supervisor", false)
-      .neq("id", currentMember.id)
-      .order("email");
-    colleagues = colleaguesData;
+    if (isIndividualAccount) {
+      const { data: invitations } = await supabase
+        .from("feedback_invitations")
+        .select("invitee_email")
+        .eq("feedback_request_id", id);
+      currentInviteeEmails = (invitations || [])
+        .map((i) => i.invitee_email)
+        .filter((v): v is string => Boolean(v));
+    } else {
+      const { data: colleaguesData } = await supabase
+        .from("members")
+        .select("id, email, full_name")
+        .eq("status", "active")
+        .eq("is_supervisor", false)
+        .neq("id", currentMember.id)
+        .order("email");
+      colleagues = colleaguesData;
 
-    const { data: invitations } = await supabase
-      .from("feedback_invitations")
-      .select("invitee_member_id")
-      .eq("feedback_request_id", id);
-    currentInviteeIds = (invitations || [])
-      .map((i) => i.invitee_member_id)
-      .filter((v): v is string => Boolean(v));
+      const { data: invitations } = await supabase
+        .from("feedback_invitations")
+        .select("invitee_member_id")
+        .eq("feedback_request_id", id);
+      currentInviteeIds = (invitations || [])
+        .map((i) => i.invitee_member_id)
+        .filter((v): v is string => Boolean(v));
+    }
   }
 
   return (
@@ -463,21 +502,40 @@ export default async function FeedbackRequestPage({
           {canManage ? (
             <>
               <p className="text-xs text-gray-500 mb-4">
-                Todavía nadie ha respondido, así que puedes cambiar a quién
-                invitaste o cancelarla.
+                Todavía nadie ha respondido — puedes ver a quién ya invitaste
+                (sin saber si ha respondido o no), añadir más gente, o
+                cancelar la solicitud. Ya no se puede quitar ni cambiar a
+                quien ya invitaste.
               </p>
-              <form
-                action={updateFeedbackRequestEvaluators}
-                className="flex flex-col gap-3 mb-4"
-              >
-                <input type="hidden" name="requestId" value={id} />
-                <EvaluatorPicker
-                  colleagues={colleagues || []}
-                  checkboxName="inviteeIds"
-                  defaultCheckedIds={currentInviteeIds}
-                  minSelected={minInvitees}
-                />
-              </form>
+              {isIndividualAccount ? (
+                <form
+                  action={updateFeedbackRequestEvaluatorsForIndividual}
+                  className="flex flex-col gap-3 mb-4"
+                >
+                  <input type="hidden" name="requestId" value={id} />
+                  <EmailEvaluatorPicker
+                    fieldName="inviteeEmails"
+                    minEmails={minInvitees}
+                    defaultEmails={currentInviteeEmails}
+                    canModifyExisting={false}
+                    submitLabel="Guardar cambios"
+                  />
+                </form>
+              ) : (
+                <form
+                  action={updateFeedbackRequestEvaluators}
+                  className="flex flex-col gap-3 mb-4"
+                >
+                  <input type="hidden" name="requestId" value={id} />
+                  <EvaluatorPicker
+                    colleagues={colleagues || []}
+                    checkboxName="inviteeIds"
+                    defaultCheckedIds={currentInviteeIds}
+                    minSelected={minInvitees}
+                    canModifyExisting={false}
+                  />
+                </form>
+              )}
               <form action={cancelFeedbackRequest} className="inline">
                 <input type="hidden" name="requestId" value={id} />
                 <button type="submit" className="text-sm underline text-red-700">
@@ -527,25 +585,10 @@ export default async function FeedbackRequestPage({
         </div>
         {!revealed ? (
           <p className="text-sm text-gray-600">
-            Han respondido {progress?.response_count ?? 0} de {progress?.threshold ?? 3}{" "}
-            necesarias para poder ver algo. Nadie sabe quién ha respondido ya.
-            {isCycle && !progress?.self_responded && (
-              <>
-                {" "}
-                Además, hasta que no hagas tu propia autoevaluación tampoco podrás ver
-                cómo te ven los demás.
-              </>
-            )}
-            {isCycle &&
-              progress?.self_responded &&
-              (progress?.response_count ?? 0) >= (progress?.threshold ?? 3) && (
-                <>
-                  {" "}
-                  Ya se ha superado el mínimo, pero en un 360 no se muestra nada
-                  hasta tener al menos el 80% de las respuestas — para no ver el
-                  informe cambiando todo el rato con muy pocos datos.
-                </>
-              )}
+            {progressPendingMessage
+              .replace("{respondidas}", String(progress?.response_count ?? 0))
+              .replace("{necesarias}", String(progress?.threshold ?? 3))}
+            {isCycle && !progress?.self_responded && <> {progressSelfReminder}</>}
           </p>
         ) : (
           <>
@@ -564,15 +607,14 @@ export default async function FeedbackRequestPage({
                   desbloquean cuando tú decidas finalizarlo — no antes, y no
                   automáticamente.
                 </p>
-                <form action={finalizeCycleRequest}>
-                  <input type="hidden" name="requestId" value={id} />
-                  <button
-                    type="submit"
-                    className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800"
-                  >
-                    Finalizar informe
-                  </button>
-                </form>
+                <FinalizeReportButton
+                  requestId={id}
+                  action={finalizeCycleRequest}
+                  confirmMessage={finalizeConfirmMessage.replace(
+                    "{pendientes}",
+                    String(Math.max((totalInvitees ?? 0) - totalResponseCount, 0))
+                  )}
+                />
               </div>
             )}
             {isCycle && isFinal && cycleClosesAt && (

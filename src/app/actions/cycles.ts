@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { generateAiInterpretation } from "@/lib/aiInterpretation";
+import { sendInvitationEmails } from "@/lib/invitationEmails";
 
 export async function createFeedbackCycle(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
@@ -82,7 +83,7 @@ export async function organizeCycleEvaluators(
 
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("organize_cycle_evaluators", {
+  const { data: requestId, error } = await supabase.rpc("organize_cycle_evaluators", {
     p_cycle_id: cycleId,
     p_evaluator_member_ids: evaluatorIds,
     p_evaluator_categories: categories,
@@ -90,6 +91,10 @@ export async function organizeCycleEvaluators(
 
   if (error) {
     return { error: error.message };
+  }
+
+  if (requestId) {
+    await sendInvitationEmails(supabase, requestId);
   }
 
   revalidatePath("/dashboard");
@@ -107,7 +112,7 @@ export async function createIndividualCycleRequest(
 
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("create_individual_cycle_request", {
+  const { data: requestId, error } = await supabase.rpc("create_individual_cycle_request", {
     p_evaluator_emails: evaluatorEmails,
     p_evaluator_categories: categories,
     p_closes_at: closesAt,
@@ -116,6 +121,10 @@ export async function createIndividualCycleRequest(
 
   if (error) {
     return { error: error.message };
+  }
+
+  if (requestId) {
+    await sendInvitationEmails(supabase, requestId);
   }
 
   revalidatePath("/dashboard");

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ResponderWizard from "@/components/ResponderWizard";
+import ResponderIntroGate from "@/components/ResponderIntroGate";
+import { getPlatformText } from "@/lib/platformTexts";
 
 type Question = {
   id: string;
@@ -92,6 +94,23 @@ export default async function RespondPage({
   const scaleLevels = ctx.scale_levels || [];
   const competencies = ctx.competencies || [];
 
+  const introText = isSelf
+    ? null
+    : await getPlatformText(
+        supabase,
+        "responder_intro",
+        "Alguien te ha elegido para contarle qué impacto tiene en ti. Tu respuesta es completamente anónima."
+      );
+
+  const wizard = (
+    <ResponderWizard
+      token={token}
+      questions={questions}
+      scaleLevels={scaleLevels}
+      competencies={competencies}
+    />
+  );
+
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-1">
@@ -112,12 +131,11 @@ export default async function RespondPage({
         <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
       )}
 
-      <ResponderWizard
-        token={token}
-        questions={questions}
-        scaleLevels={scaleLevels}
-        competencies={competencies}
-      />
+      {introText ? (
+        <ResponderIntroGate introText={introText}>{wizard}</ResponderIntroGate>
+      ) : (
+        wizard
+      )}
     </main>
   );
 }

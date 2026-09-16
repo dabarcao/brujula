@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { sendInvitationEmails, sendThankYouEmail } from "@/lib/invitationEmails";
 
 export async function createFeedbackRequest(formData: FormData) {
   const inviteeIds = formData.getAll("inviteeIds").map(String);
@@ -11,7 +12,7 @@ export async function createFeedbackRequest(formData: FormData) {
 
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("create_ad_hoc_feedback_request", {
+  const { data: requestId, error } = await supabase.rpc("create_ad_hoc_feedback_request", {
     p_invitee_member_ids: inviteeIds,
     p_subtype: subtype,
     p_name: name || null,
@@ -19,6 +20,10 @@ export async function createFeedbackRequest(formData: FormData) {
 
   if (error) {
     redirect("/dashboard/feedback/nueva?error=" + encodeURIComponent(error.message));
+  }
+
+  if (requestId) {
+    await sendInvitationEmails(supabase, requestId);
   }
 
   revalidatePath("/dashboard");
@@ -32,14 +37,21 @@ export async function createFeedbackRequestForIndividual(formData: FormData) {
 
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("create_ad_hoc_feedback_request_for_individual", {
-    p_invitee_emails: inviteeEmails,
-    p_subtype: subtype,
-    p_name: name || null,
-  });
+  const { data: requestId, error } = await supabase.rpc(
+    "create_ad_hoc_feedback_request_for_individual",
+    {
+      p_invitee_emails: inviteeEmails,
+      p_subtype: subtype,
+      p_name: name || null,
+    }
+  );
 
   if (error) {
     redirect("/dashboard/feedback/nueva?error=" + encodeURIComponent(error.message));
+  }
+
+  if (requestId) {
+    await sendInvitationEmails(supabase, requestId);
   }
 
   revalidatePath("/dashboard");
@@ -99,6 +111,25 @@ export async function updateFeedbackRequestEvaluators(formData: FormData) {
   redirect(`/dashboard/feedback/${requestId}?updated=1`);
 }
 
+export async function updateFeedbackRequestEvaluatorsForIndividual(formData: FormData) {
+  const requestId = String(formData.get("requestId") || "");
+  const inviteeEmails = formData.getAll("inviteeEmails").map(String);
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("update_ad_hoc_feedback_request_evaluators_for_individual", {
+    p_request_id: requestId,
+    p_invitee_emails: inviteeEmails,
+  });
+
+  if (error) {
+    redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/dashboard");
+  redirect(`/dashboard/feedback/${requestId}?updated=1`);
+}
+
 type FeedbackAnswer = {
   question_id: string;
   answer_text?: string;
@@ -140,13 +171,22 @@ export async function submitFeedbackResponse(formData: FormData) {
 
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("submit_feedback_response", {
+  const { data, error } = await supabase.rpc("submit_feedback_response", {
     p_token: token,
     p_answers: answers,
   });
 
   if (error) {
     redirect(`/responder/${token}?error=` + encodeURIComponent(error.message));
+  }
+
+  // invitee_email solo viene relleno cuando quien respondió no tenía
+  // cuenta (submit_feedback_response decide esa regla, no aquí) — en ese
+  // caso, y solo en ese, se le manda el agradecimiento con la sugerencia
+  // de registrarse.
+  const inviteeEmail = data?.[0]?.invitee_email;
+  if (inviteeEmail) {
+    await sendThankYouEmail(supabase, inviteeEmail);
   }
 
   // Quien respondió por email (sin cuenta) no tiene panel al que volver —
