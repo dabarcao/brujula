@@ -126,6 +126,7 @@ export default function ResponderWizard({
           }}
           hidden={step !== i}
           className="flex flex-col gap-1"
+          onChange={() => setStepError(null)}
         >
           <input type="hidden" name="questionId" value={question.id} />
           <input type="hidden" name="questionType" value={question.question_type} />
