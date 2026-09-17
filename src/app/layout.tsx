@@ -6,7 +6,12 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Brújula",
-  description: "Encuentra tu rumbo, con feedback seguro.",
+  // Deliberadamente distinta del tagline que ya lleva horneado
+  // opengraph-image.tsx ("Encuentra tu rumbo, con feedback seguro.") --
+  // en la vista previa de WhatsApp salen los dos a la vez (uno dentro de
+  // la imagen, este como texto debajo), y el usuario prefirió verlos
+  // complementarse en vez de repetirse.
+  description: "Tu brújula para crecer: feedback anónimo y honesto de las personas que te conocen mejor.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
