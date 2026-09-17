@@ -17,15 +17,23 @@ type ScaleLevel = {
 // que nadie lo haya elegido de verdad. Por eso el valor real que se
 // manda en el formulario (el input oculto) se queda vacío hasta el
 // primer toque, aunque la barra ya se vea en su posición central.
+// `defaultValue` (spec-4-4-responder-invitation-screens-redesign.md):
+// optional seed for ResponderWizard's own localStorage draft restore --
+// when a paused wizard is reopened, the wizard passes back the value the
+// evaluator had already set, via a one-time remount (see ResponderWizard's
+// own `key` on this component), never a live-controlled prop -- this
+// component still owns its own interaction model afterwards, unchanged.
 export default function ScaleSlider({
   name,
   levels,
+  defaultValue,
 }: {
   name: string;
   levels: ScaleLevel[];
+  defaultValue?: number;
 }) {
-  const [touched, setTouched] = useState(false);
-  const [value, setValue] = useState(3);
+  const [touched, setTouched] = useState(defaultValue != null);
+  const [value, setValue] = useState(defaultValue ?? 3);
 
   const sortedLevels = [...levels].sort((a, b) => a.level - b.level);
 
@@ -43,23 +51,23 @@ export default function ScaleSlider({
             setValue(Number(e.target.value));
             setTouched(true);
           }}
-          className="flex-1 accent-black"
+          className="flex-1 accent-indigo"
         />
         <span
           className={
             "text-sm font-medium w-8 text-right tabular-nums " +
-            (touched ? "text-gray-900" : "text-gray-300")
+            (touched ? "text-ink" : "text-ink-soft")
           }
         >
           {touched ? value : "—"}
         </span>
       </div>
-      <div className="flex justify-between text-[10px] text-gray-400 px-0.5">
+      <div className="flex justify-between text-[10px] text-ink-soft px-0.5">
         {sortedLevels.map((level) => (
           <span key={level.level}>{level.label}</span>
         ))}
       </div>
-      {!touched && <p className="text-[10px] text-gray-400">Desliza para elegir un valor.</p>}
+      {!touched && <p className="text-[10px] text-ink-soft">Desliza para elegir un valor.</p>}
     </div>
   );
 }

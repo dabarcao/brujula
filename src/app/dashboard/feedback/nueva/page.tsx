@@ -1,15 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import * as authManager from "@/server/managers/authManager";
+import * as membersManager from "@/server/managers/membersManager";
+import * as feedbackManager from "@/server/managers/feedbackManager";
 import { createFeedbackRequest, createFeedbackRequestForIndividual } from "@/app/actions/feedback";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
 import EmailEvaluatorPicker from "@/components/EmailEvaluatorPicker";
-
-type ColleagueRow = {
-  id: string;
-  email: string;
-  full_name: string | null;
-};
+import Card from "@/components/ui/Card";
+import ErrorBanner from "@/components/ui/ErrorBanner";
 
 export default async function NewFeedbackRequestPage({
   searchParams,
@@ -17,54 +15,38 @@ export default async function NewFeedbackRequestPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await authManager.getCurrentUser();
   if (!user) {
     redirect("/login");
   }
 
-  const { data: currentMember } = await supabase
-    .from("members")
-    .select("id, organization_id, status, organizations(kind)")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-
+  const currentMember = await membersManager.getCurrentMember();
   if (!currentMember || currentMember.status !== "active") {
     redirect("/dashboard");
   }
 
-  const isIndividual =
-    (currentMember.organizations as unknown as { kind: string } | null)?.kind === "individual";
+  const isIndividual = currentMember.organization?.kind === "individual";
 
-  const { data: openRequest } = await supabase
-    .from("feedback_requests")
-    .select("id")
-    .eq("requester_member_id", currentMember.id)
-    .eq("request_type", "ad_hoc")
-    .eq("status", "open")
-    .maybeSingle();
+  const openRequestId = await feedbackManager.getMyOpenRequestId(currentMember.id, "ad_hoc");
 
-  if (openRequest) {
+  if (openRequestId) {
     return (
       <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-semibold">Pedir feedback</h1>
-          <Link href="/dashboard" className="text-sm underline text-gray-600">
+          <h1 className="text-2xl font-semibold text-ink">Pedir feedback</h1>
+          <Link href="/dashboard" className="text-sm underline text-ink-soft">
             Volver al panel
           </Link>
         </div>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-ink-soft">
           Ya tienes una solicitud abierta. Solo puedes tener una a la vez —
           puedes modificarla o cancelarla (mientras nadie haya respondido
           todavía) desde su página.
         </p>
         <Link
-          href={`/dashboard/feedback/${openRequest.id}`}
-          className="inline-block mt-4 underline text-sm"
+          href={`/dashboard/feedback/${openRequestId}`}
+          className="inline-block mt-4 underline text-sm text-ink"
         >
           Ver mi solicitud abierta
         </Link>
@@ -72,13 +54,7 @@ export default async function NewFeedbackRequestPage({
     );
   }
 
-  const { data: settings } = await supabase
-    .from("platform_settings")
-    .select("min_invitees_per_request")
-    .eq("organization_id", currentMember.organization_id)
-    .maybeSingle();
-
-  const minInvitees = settings?.min_invitees_per_request ?? 5;
+  const minInvitees = await feedbackManager.getMinInviteesPerRequest(currentMember.organizationId);
 
   // Cuenta individual: no tiene compañeros dados de alta (su organización
   // es solo ella), así que invita por email en vez de elegir de una lista.
@@ -86,71 +62,63 @@ export default async function NewFeedbackRequestPage({
     return (
       <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-semibold">Pedir feedback</h1>
-          <Link href="/dashboard" className="text-sm underline text-gray-600">
+          <h1 className="text-2xl font-semibold text-ink">Pedir feedback</h1>
+          <Link href="/dashboard" className="text-sm underline text-ink-soft">
             Volver al panel
           </Link>
         </div>
 
-        <p className="text-sm text-gray-600 mb-6">
+        <p className="text-sm text-ink-soft mb-6">
           Escribe el email de al menos {minInvitees} personas. Nadie sabrá qué
           respondió quién, y no verás nada hasta que respondan al menos 3.
         </p>
 
-        {error && (
-          <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
-        )}
+        {error && <ErrorBanner>{error}</ErrorBanner>}
 
         <form action={createFeedbackRequestForIndividual} className="flex flex-col gap-4">
           <NameField />
           <SubtypeFieldset />
-          <EmailEvaluatorPicker fieldName="inviteeEmails" minEmails={minInvitees} />
+          <EmailEvaluatorPicker fieldName="inviteeEmails" minEmails={minInvitees} primary />
         </form>
       </main>
     );
   }
 
-  const { data: colleagues } = await supabase
-    .from("members")
-    .select("id, email, full_name")
-    .eq("status", "active")
-    .eq("is_supervisor", false)
-    .neq("id", currentMember.id)
-    .order("email");
+  const colleagues = await feedbackManager.getEvaluatorCandidates(currentMember.id);
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">Pedir feedback</h1>
-        <Link href="/dashboard" className="text-sm underline text-gray-600">
+        <h1 className="text-2xl font-semibold text-ink">Pedir feedback</h1>
+        <Link href="/dashboard" className="text-sm underline text-ink-soft">
           Volver al panel
         </Link>
       </div>
 
-      <p className="text-sm text-gray-600 mb-6">
+      <p className="text-sm text-ink-soft mb-6">
         Elige al menos {minInvitees} compañeros. Nadie sabrá qué respondió
         quién, y no verás nada hasta que respondan al menos 3 personas.
       </p>
 
-      {error && (
-        <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
-      )}
+      {error && <ErrorBanner>{error}</ErrorBanner>}
 
-      {!colleagues || colleagues.length < minInvitees ? (
-        <p className="text-sm text-gray-500">
-          Todavía no hay suficientes compañeros activos en tu organización
-          (hacen falta al menos {minInvitees}). Invita a más empleados desde{" "}
-          <Link href="/dashboard/members" className="underline">
-            Gestionar empleados
-          </Link>
-          .
-        </p>
+      {colleagues.length < minInvitees ? (
+        <Card>
+          <p className="text-sm text-ink-soft">
+            Todavía no hay suficientes compañeros activos en tu organización
+            (hacen falta al menos {minInvitees}). Invita a más empleados desde{" "}
+            <Link href="/dashboard/members" className="underline text-ink">
+              Gestionar empleados
+            </Link>
+            .
+          </p>
+        </Card>
       ) : (
         <form action={createFeedbackRequest} className="flex flex-col gap-4">
           <NameField />
           <SubtypeFieldset />
           <EvaluatorPicker
-            colleagues={colleagues as ColleagueRow[]}
+            colleagues={colleagues.map((c) => ({ id: c.id, email: c.email, full_name: c.fullName }))}
             checkboxName="inviteeIds"
             minSelected={minInvitees}
             submitLabel="Enviar solicitud"
@@ -164,7 +132,7 @@ export default async function NewFeedbackRequestPage({
 
 function NameField() {
   return (
-    <label className="flex flex-col gap-1 text-sm">
+    <label className="flex flex-col gap-1 text-sm text-ink">
       Nombre para identificar este feedback (se mostrará como &ldquo;Feedback
       ágil {"{tu nombre}"}&rdquo;)
       <input
@@ -172,7 +140,7 @@ function NameField() {
         type="text"
         required
         placeholder="Competencias — Q1"
-        className="border rounded px-3 py-2"
+        className="border border-line rounded-brujula-sm px-3 py-2 bg-paper-deep text-ink"
       />
     </label>
   );
@@ -187,18 +155,18 @@ function NameField() {
 // a construir del todo y no tenían ningún plan real detrás.
 function SubtypeFieldset() {
   return (
-    <fieldset className="border rounded p-4">
-      <legend className="text-sm font-medium px-1">¿Sobre qué es el feedback?</legend>
+    <fieldset className="border border-line rounded-brujula-sm p-4">
+      <legend className="text-sm font-medium text-ink px-1">¿Sobre qué es el feedback?</legend>
       <div className="flex flex-col gap-2 mt-2">
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm text-ink">
           <input type="radio" name="subtype" value="competencias" defaultChecked />
           Por competencias
         </label>
-        <label className="flex items-center gap-2 text-sm text-gray-400 cursor-not-allowed">
+        <label className="flex items-center gap-2 text-sm text-ink-soft cursor-not-allowed">
           <input type="radio" disabled />
           Reconocimiento <span className="text-xs">(en construcción)</span>
         </label>
-        <label className="flex items-center gap-2 text-sm text-gray-400 cursor-not-allowed">
+        <label className="flex items-center gap-2 text-sm text-ink-soft cursor-not-allowed">
           <input type="radio" disabled />
           Feedback periódico <span className="text-xs">(en construcción)</span>
         </label>

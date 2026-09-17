@@ -16,7 +16,7 @@ Feedback anónimo entre compañeros, con orientación hacia la mejora.
    npm install
    ```
 
-2. Copia `.env.local.example` a `.env.local` y rellena con los valores de tu
+2. Copia `.env.example` a `.env.local` y rellena con los valores de tu
    proyecto de Supabase (Project Settings → API en el dashboard de Supabase).
 
 3. Arranca el servidor de desarrollo:

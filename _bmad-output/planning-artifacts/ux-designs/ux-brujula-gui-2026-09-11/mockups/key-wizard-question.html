@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Brújula — Wizard responder (mock)</title>
+<style>
+  /* Governs: EXPERIENCE.md "Wizard question card" (Component Patterns),
+     "Saved/paused" (State Patterns), Key Flow "Diego gives feedback
+     mid-wizard". DESIGN.md: Colors (indigo/coral), Shapes (rounded.md/full),
+     Components (progress-bar, anonymity-badge, bookmark-chip).
+     Mobile-first per Foundation. System font stack stands in for Sora/Inter
+     (offline mock). No JS, no network. */
+  :root{
+    --paper:#F7F4EE; --paper-deep:#FFFFFF; --ink:#1C2033; --ink-soft:#5B5F7A;
+    --line:#E4DFD3; --indigo:#3B4FA6; --indigo-wash:#E7EAF7; --indigo-deep:#232F73;
+    --coral:#FF6B4A; --coral-wash:#FFE4DA; --coral-deep:#C64A2E;
+    --display:"Sora","Segoe UI Semibold",system-ui,sans-serif;
+    --body:"Inter","Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#d8d3c4;font-family:var(--body);padding:32px;display:flex;gap:28px;flex-wrap:wrap;justify-content:center;}
+  .phone{width:320px;background:var(--paper);border-radius:34px;box-shadow:0 20px 50px rgba(0,0,0,.28);overflow:hidden;border:6px solid #1c1f2e;}
+  .notch{height:22px;background:#1c1f2e;position:relative;}
+  .notch::after{content:"";position:absolute;left:50%;top:4px;transform:translateX(-50%);width:70px;height:12px;background:#000;border-radius:8px;}
+  .screen{padding:22px 20px 28px;min-height:520px;display:flex;flex-direction:column;}
+  .label{font-family:var(--body);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--coral);font-weight:600;margin-bottom:14px;text-align:center;}
+  .progress-track{height:6px;border-radius:9999px;background:var(--line);overflow:hidden;margin-bottom:24px;}
+  .progress-fill{height:100%;width:63%;background:var(--indigo);border-radius:9999px;}
+  .q-eyebrow{font-size:12px;color:var(--ink-soft);margin-bottom:8px;}
+  .q-card{background:var(--paper-deep);border-radius:14px;box-shadow:0 1px 2px rgba(28,32,58,.06),0 8px 20px rgba(28,32,58,.08);padding:22px 18px;flex:1;display:flex;flex-direction:column;}
+  .q-text{font-family:var(--display);font-size:17px;font-weight:600;color:var(--ink);line-height:1.4;margin-bottom:20px;}
+  textarea{flex:1;border:1px solid var(--line);border-radius:10px;padding:12px;font-family:var(--body);font-size:14px;color:var(--ink-soft);resize:none;min-height:100px;}
+  .anon-badge{display:flex;align-items:center;gap:7px;background:var(--indigo-wash);color:var(--indigo-deep);border-radius:9999px;padding:8px 14px;font-size:12px;font-weight:600;margin-top:16px;}
+  .anon-badge.emph{background:var(--coral-wash);color:var(--coral-deep);}
+  .submit{margin-top:16px;background:var(--indigo);color:#fff;border:none;border-radius:22px;padding:14px;font-family:var(--display);font-weight:600;font-size:14px;box-shadow:0 10px 28px rgba(35,47,115,.18);min-height:44px;}
+  .submit:focus-visible{outline:2px solid var(--paper-deep);outline-offset:2px;}
+
+  .bookmark-screen{padding:22px 20px 28px;min-height:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+  .bookmark-chip{display:inline-flex;align-items:center;gap:8px;background:var(--coral-wash);color:var(--coral-deep);border-radius:8px;padding:14px 20px;font-family:var(--display);font-weight:600;font-size:14px;margin-bottom:10px;}
+  .bookmark-sub{font-size:12.5px;color:var(--ink-soft);max-width:220px;}
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="label">Estado 1 · mid-wizard, enviando la pregunta sensible</div>
+      <div class="progress-track"><div class="progress-fill"></div></div>
+      <div class="q-eyebrow">Pregunta 19 de 30 · Feedback ágil para Pablo R.</div>
+      <div class="q-card">
+        <div class="q-text">¿Cuál dirías que es un desafío para Pablo en cómo lidera al equipo?</div>
+        <textarea placeholder="Escribe tu respuesta…">A veces evita dar feedback directo cuando algo no funciona, y el equipo se queda sin saber qué ajustar.</textarea>
+        <div class="anon-badge emph">✓ Anónimo — nadie ve tu nombre</div>
+        <button class="submit">Enviar y continuar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="bookmark-screen">
+      <div class="label">Estado 2 · retoma tras pausar</div>
+      <span class="bookmark-chip">🔖 Guardado</span>
+      <div class="bookmark-sub">Continúa cuando quieras — tus respuestas de Pablo R. siguen aquí, tal como las dejaste.</div>
+    </div>
+  </div>
+</body>
+</html>

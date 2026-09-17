@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import type { CSSProperties } from "react";
 import { GROUP_COLORS, GROUP_LABELS, GROUP_ORDER } from "@/components/CompetencyRadar";
 import {
   EVALUATOR_CATEGORY_LABELS,
@@ -26,10 +27,12 @@ export default function CompetencyComparisonChart({
   axes: rawAxes,
   categorySeries,
   size = 440,
-  // Por defecto para el informe individual ("tú" tiene sentido ahí — quien
+  // Por defecto para el informe individual ("Tú" tiene sentido ahí -- quien
   // lo ve es la propia persona evaluada). El informe de grupo, que reutiliza
-  // este mismo componente, no tiene un "tú" único — le pasa sus propias
-  // etiquetas ("Autopercepción (media)" / "Compañeros (media)").
+  // este mismo componente (dashboard/groups/[id]/page.tsx), no tiene un
+  // "tú" único -- le pasa sus propias etiquetas ("Auto-percepción (equipo)"
+  // / "Evaluadores", Story 7.2) en vez de reutilizar las del informe
+  // individual sin más sentido.
   selfLabel = "Tú",
   peerLabel = "Media",
 }: {
@@ -158,13 +161,10 @@ export default function CompetencyComparisonChart({
 
   const seriesByCategory = new Map(categorySeries.map((s) => [s.category, s.valuesByCode]));
 
-  // Escala de referencia (1-5) — a las 12:00, en el hueco entre los dos
-  // ejes de Plenitud (que siempre queda centrada arriba). Desde el modelo
-  // v2 los 5 grupos ya no son de tamaño igual (2/4/4/3/3 competencias),
-  // así que el límite entre dos sectores ya no cae siempre en el mismo
-  // sitio — el centro de Plenitud sí es estable, pase lo que pase con el
-  // resto de grupos.
-  const scaleAngle = -Math.PI / 2;
+  // Escala de referencia (1-5) — con Plenitud centrada arriba, el hueco
+  // limpio más cercano a la vertical opuesta es el que separa Arquitecto
+  // de Catalizador (justo abajo del todo con 5 sectores iguales).
+  const scaleAngle = Math.PI / 2;
   const scaleTicks = [1, 2, 3, 4, 5].map((level) => {
     const r = maxRadius * (level / 5);
     return {
@@ -221,15 +221,28 @@ export default function CompetencyComparisonChart({
   return (
     <div className="flex flex-col items-center w-full">
       <svg viewBox={`0 0 ${size} ${size}`} width="100%" style={{ maxWidth: size }}>
-        {quadrants.map((q) => (
+        {/* Los "cinco sectores" del AC (rol VACC + Plenitud) -- ~60ms de
+            stagger por sector, ver globals.css `brujula-axis-in`. Bajo
+            `prefers-reduced-motion` el `motion-safe:` no aplica la clase en
+            absoluto, así que el gajo queda con su opacidad final (0.07) de
+            siempre, sin animación ni retraso. */}
+        {quadrants.map((q, i) => (
           <path
             key={`quadrant-${q.code}`}
             d={q.d}
             fill={GROUP_COLORS[q.code] || "#6b7280"}
             opacity={0.07}
+            className="origin-center motion-safe:animate-[brujula-axis-in_0.4s_ease-out_both]"
+            style={
+              {
+                transformBox: "fill-box",
+                animationDelay: `${i * 60}ms`,
+                "--brujula-target-opacity": 0.07,
+              } as CSSProperties
+            }
           />
         ))}
-        {quadrants.map((q) => (
+        {quadrants.map((q, i) => (
           <text
             key={`quadrant-label-${q.code}`}
             x={q.labelX}
@@ -240,6 +253,14 @@ export default function CompetencyComparisonChart({
             dominantBaseline="middle"
             fill={GROUP_COLORS[q.code] || "#6b7280"}
             opacity={0.3}
+            className="origin-center motion-safe:animate-[brujula-axis-in_0.4s_ease-out_both]"
+            style={
+              {
+                transformBox: "fill-box",
+                animationDelay: `${i * 60}ms`,
+                "--brujula-target-opacity": 0.3,
+              } as CSSProperties
+            }
           >
             {GROUP_LABELS[q.code] || q.code}
           </text>
@@ -267,7 +288,7 @@ export default function CompetencyComparisonChart({
           />
         ))}
         {wedges.map((w) => (
-          <path key={`wedge-${w.code}`} d={w.d} fill={w.color} opacity={0.4} />
+          <path key={`wedge-${w.code}`} d={w.d} fill={w.color} opacity={0.18} />
         ))}
         {categorySeries.map((series) =>
           activeCategories.has(series.category) ? (
@@ -341,9 +362,21 @@ export default function CompetencyComparisonChart({
 
       {categorySeries.length > 0 && (
         <div className="mt-4 w-full">
-          <p className="text-xs text-gray-500 mb-2">
+          <p className="text-caption font-caption text-ink-soft mb-2">
             Ver también la media de un grupo concreto de evaluadores:
           </p>
+          {/* Píldoras con la forma/tipografía de RoleBadge (rounded-full,
+              font-caption/text-caption) -- pero sin reusar RoleBadge en sí
+              (su prop `role` es una unión cerrada de 5 roles VACC, no las 4
+              categorías de evaluador violeta). El hex de cada categoría NUNCA
+              se usa como color de TEXTO -- dos de los 4 tonos fijos
+              (`#ddd6fe`, `#a78bfa`) no llegan al 3:1 de contraste mínimo para
+              texto de UI sobre su propio fondo lavado, activo o inactivo. El
+              texto usa los tokens de tinta de siempre (`text-ink`/
+              `text-ink-soft`, ya AA-seguros sobre fondos neutros en ambos
+              temas) y el hex se reserva para el punto indicador, el borde y
+              el fondo -- exactamente los 4 hexadecimales de siempre, solo
+              cambia cuánto se oscurece el fondo entre activo/inactivo. */}
           <div className="flex flex-wrap gap-2">
             {categorySeries.map((series) => {
               const active = activeCategories.has(series.category);
@@ -353,15 +386,18 @@ export default function CompetencyComparisonChart({
                   key={series.category}
                   type="button"
                   onClick={() => toggleCategory(series.category)}
-                  className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors"
-                  style={
-                    active
-                      ? { borderColor: color, color, backgroundColor: `${color}14` }
-                      : { borderColor: "#d1d5db", color: "#6b7280" }
+                  aria-pressed={active}
+                  className={
+                    "inline-flex items-center gap-1.5 rounded-full font-caption text-caption px-3 py-1 border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo " +
+                    (active ? "text-ink font-semibold" : "text-ink-soft")
                   }
+                  style={{
+                    backgroundColor: active ? `${color}33` : `${color}14`,
+                    borderColor: `${color}${active ? "66" : "33"}`,
+                  }}
                 >
                   <span
-                    className="inline-block w-2 h-2 rounded-full"
+                    className="inline-block w-2 h-2 rounded-full shrink-0"
                     style={{ backgroundColor: color }}
                   />
                   {EVALUATOR_CATEGORY_LABELS[series.category] || series.category}
@@ -372,10 +408,16 @@ export default function CompetencyComparisonChart({
         </div>
       )}
 
-      <div className="mt-4 w-full overflow-x-auto">
-        <table className="w-full text-xs border rounded overflow-hidden">
+      {/* La tabla de valores exactos aparece después de que aterrice el
+          último sector (5 sectores x 60ms + su propia duración de 0.4s) --
+          motion-safe:-gated igual que los sectores de arriba. */}
+      <div
+        className="mt-4 w-full overflow-x-auto motion-safe:animate-[brujula-axis-in_0.4s_ease-out_both]"
+        style={{ animationDelay: "340ms" }}
+      >
+        <table className="w-full text-xs border border-line rounded-brujula-sm overflow-hidden">
           <thead>
-            <tr className="bg-gray-50 text-left text-gray-500">
+            <tr className="bg-surface-2 text-left text-ink-soft">
               <th className="px-3 py-2 font-medium">Competencia</th>
               {tableColumns.map((col) => (
                 <th key={col.key} className="px-3 py-2 font-medium text-right">
@@ -384,39 +426,19 @@ export default function CompetencyComparisonChart({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-line">
             {tableRowGroups.map((group) => {
               const color = GROUP_COLORS[group.groupCode] || "#6b7280";
               return (
                 <Fragment key={group.groupCode}>
                   <tr>
                     <td
+                      colSpan={1 + tableColumns.length}
                       className="px-3 py-1.5 text-xs font-semibold"
                       style={{ backgroundColor: `${color}14`, color }}
                     >
                       {GROUP_LABELS[group.groupCode] || group.groupCode}
                     </td>
-                    {tableColumns.map((col) => {
-                      // Media de la dimensión — solo entre las competencias
-                      // de este grupo que sí tienen dato en esta columna,
-                      // no un promedio forzado sobre todas.
-                      const values = group.rows
-                        .map((axis) => col.getValue(axis))
-                        .filter((v): v is number => v != null);
-                      const avg =
-                        values.length > 0
-                          ? values.reduce((a, b) => a + b, 0) / values.length
-                          : null;
-                      return (
-                        <td
-                          key={col.key}
-                          className="px-3 py-1.5 text-xs font-semibold text-right"
-                          style={{ backgroundColor: `${color}14`, color }}
-                        >
-                          {avg != null ? avg.toFixed(1) : "—"}
-                        </td>
-                      );
-                    })}
                   </tr>
                   {group.rows.map((axis) => (
                     <tr key={axis.code}>
@@ -424,7 +446,7 @@ export default function CompetencyComparisonChart({
                       {tableColumns.map((col) => {
                         const value = col.getValue(axis);
                         return (
-                          <td key={col.key} className="px-3 py-2 text-right text-gray-700">
+                          <td key={col.key} className="px-3 py-2 text-right text-ink">
                             {value != null ? value.toFixed(1) : "—"}
                           </td>
                         );

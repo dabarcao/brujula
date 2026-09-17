@@ -1,83 +1,92 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-
-type GroupRow = {
-  id: string;
-  name: string;
-  status: "open" | "closed";
-  is_creator: boolean;
-  my_status: "pending" | "accepted" | "rejected" | null;
-  accepted_count: number;
-  total_count: number;
-};
+import * as authManager from "@/server/managers/authManager";
+import * as membersManager from "@/server/managers/membersManager";
+import * as reportGroupsManager from "@/server/managers/reportGroupsManager";
+import * as feedbackManager from "@/server/managers/feedbackManager";
+import Card from "@/components/ui/Card";
+import { buttonPrimaryClassName } from "@/components/ui/ButtonPrimary";
+import { FormattedParagraphs } from "@/components/FormattedText";
 
 export default async function ReportGroupsPage() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await authManager.getCurrentUser();
 
   if (!user) {
     redirect("/login");
   }
 
-  const { data: currentMember } = await supabase
-    .from("members")
-    .select("id, status, organizations(kind)")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
+  const currentMember = await membersManager.getCurrentMember();
 
-  const isCompany =
-    (currentMember?.organizations as unknown as { kind: string } | null)?.kind === "company";
+  const isCompany = currentMember?.organization?.kind === "company";
 
   if (!currentMember || currentMember.status !== "active" || !isCompany) {
     redirect("/dashboard");
   }
 
-  const { data: groupsData } = await supabase.rpc("get_my_report_groups");
-  const groups = (groupsData as GroupRow[] | null) || [];
+  const [groups, introText] = await Promise.all([
+    reportGroupsManager.getMyReportGroups(),
+    feedbackManager.getPlatformText(
+      "report_groups_intro",
+      "Un informe de grupo junta el 360 ya finalizado de varias personas en una sola vista agregada. Cualquiera con su propio 360 finalizado puede crear uno e invitar a compañeros que también lo tengan; el informe se genera cuando todos los invitados han aceptado."
+    ),
+  ]);
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-semibold">Informes de grupo</h1>
-        <Link href="/dashboard" className="text-sm underline text-gray-600">
+        <Link href="/dashboard" className="text-sm underline text-ink-soft">
           Volver al panel
         </Link>
       </div>
 
+      <div className="text-sm text-ink-soft mb-6 flex flex-col gap-3">
+        <FormattedParagraphs text={introText} />
+      </div>
+
+      {/*
+        Un <Link> no puede ser hijo de <ButtonPrimary> (renderiza un
+        <button>, y <button> dentro de <a> es contenido inválido para el
+        modelo de contenido de <a> -- rompe el orden de tabulación y
+        confunde a lectores de pantalla). En su lugar, este Link usa
+        `buttonPrimaryClassName`, exportado por ButtonPrimary.tsx, para
+        quedar visualmente idéntico sin anidar dos elementos interactivos
+        y sin duplicar la cadena de clases a mano.
+      */}
       <Link
         href="/dashboard/groups/nuevo"
-        className="inline-block mb-6 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+        className={`inline-block mb-6 ${buttonPrimaryClassName}`}
       >
         Crear grupo
       </Link>
 
       {groups.length === 0 ? (
-        <p className="text-sm text-gray-500">
-          No estás en ningún grupo todavía, ni como creador ni invitado.
-        </p>
+        <Card>
+          <p className="text-sm text-ink-soft">
+            No estás en ningún grupo todavía, ni como creador ni invitado.
+          </p>
+        </Card>
       ) : (
-        <ul className="border rounded divide-y">
-          {groups.map((g) => (
-            <li key={g.id} className="flex items-center justify-between px-4 py-3 text-sm">
-              <span>
-                {g.name}
-                <span className="text-gray-400">
-                  {" "}
-                  — {g.status === "closed" ? "cerrado" : "abierto"} ({g.accepted_count} de{" "}
-                  {g.total_count} aceptados)
-                  {g.my_status === "pending" && " · te falta responder"}
+        <Card className="overflow-hidden">
+          <ul className="-m-6 divide-y divide-line">
+            {groups.map((g) => (
+              <li key={g.id} className="flex items-center justify-between px-6 py-3 text-sm">
+                <span>
+                  {g.name}
+                  <span className="text-ink-soft">
+                    {" "}
+                    — {g.status === "closed" ? "cerrado" : "abierto"} ({g.acceptedCount} de{" "}
+                    {g.totalCount} aceptados)
+                    {g.myStatus === "pending" && " · te falta responder"}
+                  </span>
                 </span>
-              </span>
-              <Link href={`/dashboard/groups/${g.id}`} className="underline text-gray-700 shrink-0">
-                Ver
-              </Link>
-            </li>
-          ))}
-        </ul>
+                <Link href={`/dashboard/groups/${g.id}`} className="underline text-ink shrink-0">
+                  Ver
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
     </main>
   );

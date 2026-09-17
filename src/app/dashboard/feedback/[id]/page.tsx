@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import * as authManager from "@/server/managers/authManager";
+import * as membersManager from "@/server/managers/membersManager";
+import * as feedbackManager from "@/server/managers/feedbackManager";
+import * as aiInterpretationManager from "@/server/managers/aiInterpretationManager";
+import type {
+  CompetencyNarrativeRow,
+  CompetencyComparisonRow,
+  CompetencyByCategoryRow,
+  SaboteadorRow,
+} from "@/server/managers/feedbackManager";
 import {
   cancelFeedbackRequest,
   closeFeedbackRequest,
@@ -16,13 +24,8 @@ import { GROUP_COLORS, GROUP_LABELS } from "@/components/CompetencyRadar";
 import { SABOTEADOR_LABELS } from "@/lib/aiInterpretation";
 import InterpretationText from "@/components/InterpretationText";
 import FinalizeReportButton from "@/components/FinalizeReportButton";
-import { getPlatformText } from "@/lib/platformTexts";
-
-type FlatAnswerRow = {
-  answer_text: string | null;
-  answer_value: number | null;
-  survey_questions: { prompt: string; position: number; question_type: string } | null;
-};
+import Card from "@/components/ui/Card";
+import ErrorBanner from "@/components/ui/ErrorBanner";
 
 type QuestionGroup = {
   prompt: string;
@@ -33,29 +36,20 @@ type QuestionGroup = {
 // Solo preguntas abiertas sin competencia asociada — las de escala y las
 // de tipo "competency" van al resumen agregado (CompetencySummaryTable),
 // no se listan respuesta por respuesta.
-async function loadQuestionGroups(
-  supabase: SupabaseClient,
-  requestId: string,
-  isSelf: boolean
-): Promise<QuestionGroup[]> {
-  const { data } = await supabase
-    .from("feedback_answers")
-    .select(
-      "answer_text, answer_value, survey_questions(prompt, position, question_type), feedback_responses!inner(feedback_request_id, is_self)"
-    )
-    .eq("feedback_responses.feedback_request_id", requestId)
-    .eq("feedback_responses.is_self", isSelf);
+async function loadQuestionGroups(requestId: string, isSelf: boolean): Promise<QuestionGroup[]> {
+  const rows = await feedbackManager.getFeedbackRequestAnswers(requestId, isSelf);
 
   const groupsByPrompt = new Map<string, QuestionGroup>();
-  for (const row of (data as unknown as FlatAnswerRow[] | null) || []) {
-    if (!row.survey_questions) continue;
-    if (row.survey_questions.question_type !== "open") continue;
-    if (!row.answer_text) continue;
-    const { prompt, position } = row.survey_questions;
+  for (const row of rows) {
+    if (row.questionType !== "open") continue;
+    if (!row.questionPrompt) continue;
+    if (!row.answerText) continue;
+    const prompt = row.questionPrompt;
+    const position = row.questionPosition ?? 0;
     if (!groupsByPrompt.has(prompt)) {
       groupsByPrompt.set(prompt, { prompt, position, answers: [] });
     }
-    groupsByPrompt.get(prompt)!.answers.push(row.answer_text);
+    groupsByPrompt.get(prompt)!.answers.push(row.answerText);
   }
   return Array.from(groupsByPrompt.values()).sort((a, b) => a.position - b.position);
 }
@@ -65,10 +59,10 @@ function QuestionGroupList({ groups }: { groups: QuestionGroup[] }) {
     <div className="flex flex-col gap-8">
       {groups.map((group) => (
         <div key={group.prompt}>
-          <h3 className="text-sm font-semibold mb-3">{group.prompt}</h3>
+          <h3 className="text-sm font-semibold text-ink mb-3">{group.prompt}</h3>
           <div className="flex flex-col gap-3">
             {group.answers.map((answer, index) => (
-              <p key={index} className="text-sm text-gray-700">
+              <p key={index} className="text-sm text-ink-soft">
                 {answer}
               </p>
             ))}
@@ -78,17 +72,6 @@ function QuestionGroupList({ groups }: { groups: QuestionGroup[] }) {
     </div>
   );
 }
-
-type CompetencyNarrativeRow = {
-  question_position: number;
-  question_prompt: string;
-  competency_code: string;
-  competency_name: string | null;
-  role_code: string | null;
-  mention_count: number;
-  avg_value: number;
-  comments: string[] | null;
-};
 
 // Las 3 preguntas de la plantilla ad_hoc_competencias (migración 0026) son
 // fijas, siempre en este orden — de ahí un titular narrativo por posición
@@ -106,10 +89,10 @@ function CompetencyNarrativeReport({ rows }: { rows: CompetencyNarrativeRow[] })
 
   const byQuestion = new Map<number, { prompt: string; rows: CompetencyNarrativeRow[] }>();
   for (const row of rows) {
-    if (!byQuestion.has(row.question_position)) {
-      byQuestion.set(row.question_position, { prompt: row.question_prompt, rows: [] });
+    if (!byQuestion.has(row.questionPosition)) {
+      byQuestion.set(row.questionPosition, { prompt: row.questionPrompt, rows: [] });
     }
-    byQuestion.get(row.question_position)!.rows.push(row);
+    byQuestion.get(row.questionPosition)!.rows.push(row);
   }
   const questions = Array.from(byQuestion.entries()).sort((a, b) => a[0] - b[0]);
 
@@ -117,34 +100,34 @@ function CompetencyNarrativeReport({ rows }: { rows: CompetencyNarrativeRow[] })
     <div className="mb-8 flex flex-col gap-8">
       {questions.map(([position, { prompt, rows: qRows }]) => (
         <div key={position}>
-          <p className="text-base font-semibold mb-3">
+          <p className="text-base font-semibold text-ink mb-3">
             {NARRATIVE_HEADLINES[position] || prompt}
           </p>
-          <div className="flex flex-col divide-y">
+          <div className="flex flex-col divide-y divide-line">
             {qRows.map((row) => {
-              const groupCode = row.role_code || "plenitud";
+              const groupCode = row.roleCode || "plenitud";
               const color = GROUP_COLORS[groupCode] || "#6b7280";
               const dimension = GROUP_LABELS[groupCode] || groupCode;
               return (
-                <div key={row.competency_code} className="pt-4 first:pt-0 pb-4 last:pb-0">
+                <div key={row.competencyCode} className="pt-4 first:pt-0 pb-4 last:pb-0">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold flex items-center gap-2">
+                    <p className="text-sm font-semibold text-ink flex items-center gap-2">
                       <span
                         className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: color }}
                       />
-                      {row.competency_name || row.competency_code}
-                      <span className="text-gray-400 font-normal">({dimension})</span>
+                      {row.competencyName || row.competencyCode}
+                      <span className="text-ink-soft font-normal">({dimension})</span>
                     </p>
-                    <span className="text-xs text-gray-400 shrink-0">
-                      {row.mention_count === 1 ? "1 mención" : `${row.mention_count} menciones`}
+                    <span className="text-xs text-ink-soft shrink-0">
+                      {row.mentionCount === 1 ? "1 mención" : `${row.mentionCount} menciones`}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">Nota media {row.avg_value} / 5</p>
+                  <p className="text-xs text-ink-soft mt-0.5">Nota media {row.avgValue} / 5</p>
                   {row.comments && row.comments.length > 0 && (
                     <ul className="flex flex-col gap-1.5 mt-2.5">
                       {row.comments.map((comment, i) => (
-                        <li key={i} className="text-sm text-gray-700 pl-3" style={{ borderLeft: `2px solid ${color}` }}>
+                        <li key={i} className="text-sm text-ink-soft pl-3" style={{ borderLeft: `2px solid ${color}` }}>
                           {comment}
                         </li>
                       ))}
@@ -159,25 +142,6 @@ function CompetencyNarrativeReport({ rows }: { rows: CompetencyNarrativeRow[] })
     </div>
   );
 }
-
-type CompetencyComparisonRow = {
-  competency_code: string;
-  competency_name: string;
-  principle_code: string | null;
-  principle_name: string | null;
-  role_code: string | null;
-  role_name: string | null;
-  self_value: number | null;
-  peer_avg_value: number | null;
-  peer_response_count: number;
-};
-
-type CompetencyByCategoryRow = {
-  competency_code: string;
-  evaluator_category: string;
-  avg_value: number;
-  response_count: number;
-};
 
 // Comparativa autoevaluación vs. media de los demás — solo tiene sentido
 // en un ciclo 360 (es el único flujo con autoevaluación). El "por
@@ -198,19 +162,19 @@ function CompetencyComparison({
 }) {
   if (rows.length === 0) return null;
   const axes = rows.map((row) => ({
-    code: row.competency_code,
-    name: row.competency_name,
-    groupCode: row.role_code || "plenitud",
-    peerAvgValue: row.peer_avg_value,
-    selfValue: row.self_value,
+    code: row.competencyCode,
+    name: row.competencyName,
+    groupCode: row.roleCode || "plenitud",
+    peerAvgValue: row.peerAvgValue,
+    selfValue: row.selfValue,
   }));
 
   const byCategory = new Map<string, Record<string, number>>();
   for (const row of byCategoryRows) {
-    if (!byCategory.has(row.evaluator_category)) {
-      byCategory.set(row.evaluator_category, {});
+    if (!byCategory.has(row.evaluatorCategory)) {
+      byCategory.set(row.evaluatorCategory, {});
     }
-    byCategory.get(row.evaluator_category)![row.competency_code] = row.avg_value;
+    byCategory.get(row.evaluatorCategory)![row.competencyCode] = row.avgValue;
   }
   const categorySeries = Array.from(byCategory.entries()).map(([category, valuesByCode]) => ({
     category,
@@ -224,12 +188,6 @@ function CompetencyComparison({
   );
 }
 
-type SaboteadorRow = {
-  saboteador_code: string;
-  avg_value: number;
-  is_high: boolean;
-};
-
 // Datos crudos de los 5 saboteadores (no solo el párrafo de la IA) —
 // mismo lenguaje visual que la tabla de CompetencyComparisonChart, pero
 // sin columna de "media de compañeros": estas preguntas son solo de
@@ -238,30 +196,35 @@ type SaboteadorRow = {
 // veo".
 function SaboteadoresReport({ rows }: { rows: SaboteadorRow[] }) {
   if (rows.length === 0) return null;
-  const sorted = [...rows].sort((a, b) => b.avg_value - a.avg_value);
+  const sorted = [...rows].sort((a, b) => b.avgValue - a.avgValue);
   return (
     <div className="mb-8">
-      <p className="text-sm font-medium text-gray-500 mb-1">Tus saboteadores</p>
-      <p className="text-xs text-gray-400 mb-4">
+      <p className="text-sm font-medium text-ink-soft mb-1">Tus saboteadores</p>
+      <p className="text-xs text-ink-soft mb-4">
         Solo autoevaluación — nadie más puntúa esto, así que no hay una media de
         compañeros con la que compararlo.
       </p>
       <div className="flex flex-col gap-3">
         {sorted.map((row) => {
-          const label = SABOTEADOR_LABELS[row.saboteador_code] || row.saboteador_code;
-          const color = row.is_high ? "#b45309" : "#6b7280";
+          const label = SABOTEADOR_LABELS[row.saboteadorCode] || row.saboteadorCode;
+          // Tono ya-existente para saboteadores (DESIGN.md), deliberadamente
+          // más suave que el radar de competencias -- nunca rojo/coral.
+          const color = row.isHigh ? "var(--saboteador-tint)" : "var(--ink-soft)";
           return (
-            <div key={row.saboteador_code}>
+            <div key={row.saboteadorCode}>
               <div className="flex items-center justify-between text-sm mb-1">
-                <span className="font-medium" style={{ color: row.is_high ? color : undefined }}>
+                <span
+                  className="font-medium"
+                  style={{ color: row.isHigh ? "var(--saboteador-tint)" : "var(--ink)" }}
+                >
                   {label}
                 </span>
-                <span className="text-gray-500">{row.avg_value.toFixed(1)} / 5</span>
+                <span className="text-ink-soft">{row.avgValue.toFixed(1)} / 5</span>
               </div>
-              <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+              <div className="h-2 rounded-brujula-sm bg-saboteador-wash overflow-hidden">
                 <div
-                  className="h-full rounded-full"
-                  style={{ width: `${(row.avg_value / 5) * 100}%`, backgroundColor: color }}
+                  className="h-full rounded-brujula-sm"
+                  style={{ width: `${(row.avgValue / 5) * 100}%`, backgroundColor: color }}
                 />
               </div>
             </div>
@@ -287,92 +250,29 @@ export default async function FeedbackRequestPage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await authManager.getCurrentUser();
   if (!user) {
     redirect("/login");
   }
 
-  const { data: currentMember } = await supabase
-    .from("members")
-    .select("id, organization_id, organizations(kind)")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
+  const currentMember = await membersManager.getCurrentMember();
+  const state = await feedbackManager.getRequestState(id);
 
-  const { data: request } = await supabase
-    .from("feedback_requests")
-    .select(
-      "id, created_at, requester_member_id, request_type, status, closes_at, name, feedback_cycles(name), ai_interpretation, ai_saboteadores_text, ai_open_answers_text"
-    )
-    .eq("id", id)
-    .maybeSingle();
-
-  if (!request || !currentMember || request.requester_member_id !== currentMember.id) {
+  if (!state || !currentMember || state.request.requesterMemberId !== currentMember.id) {
     redirect("/dashboard");
   }
 
-  const { data: progressData } = await supabase
-    .rpc("get_feedback_request_progress", { p_request_id: id })
-    .maybeSingle();
-
-  const progress = progressData as
-    | { response_count: number; threshold: number; revealed: boolean; self_responded: boolean }
-    | null;
+  // status/eligibility facts (request status + response-count-vs-threshold)
+  // come from feedbackManager.getRequestState now -- the single
+  // manager-computed source of truth shared with [id]/gestionar/page.tsx's
+  // own canManageCycle/canFullyEditCycle, instead of each page reimplementing
+  // its own formula over the same underlying facts.
+  const { request, progress, totalInvitees, totalResponseCount, isCycle, isFinal } = state;
 
   const revealed = progress?.revealed ?? false;
 
-  // progress.response_count ya es solo de compañeros (nunca cuenta la
-  // propia autoevaluación, sección 6) — para comprobar "¿ya respondió
-  // todo el mundo, incluido yo?" hace falta sumarle la autoevaluación
-  // aparte.
-  const totalResponseCount = (progress?.response_count ?? 0) + (progress?.self_responded ? 1 : 0);
-
-  const { count: totalInvitees } = await supabase
-    .from("feedback_invitations")
-    .select("id", { count: "exact", head: true })
-    .eq("feedback_request_id", id);
-
-  const [progressPendingMessage, progressSelfReminder, finalizeConfirmMessage, preliminaryNotice] =
-    await Promise.all([
-      getPlatformText(
-        supabase,
-        "progress_pending_message",
-        "Han respondido {respondidas} de {necesarias} necesarias para poder ver algo. Nadie sabe quién ha respondido ya."
-      ),
-      getPlatformText(
-        supabase,
-        "progress_pending_self_reminder",
-        "Además, hasta que no hagas tu propia autoevaluación tampoco podrás ver cómo te ven los demás."
-      ),
-      getPlatformText(
-        supabase,
-        "finalize_confirm_message",
-        "Si finalizas tu informe ahora, {pendientes} personas que todavía no han respondido no tendrán opción de hacerlo. ¿Seguro que quieres finalizarlo?"
-      ),
-      getPlatformText(
-        supabase,
-        "cycle_preliminary_notice",
-        "Es preliminar: de momento solo ves los datos agregados. Fecha límite sugerida: {fecha}. Los comentarios de texto y la interpretación de tu perfil se desbloquean cuando tú decidas finalizarlo — no antes, y no automáticamente."
-      ),
-    ]);
-
-  const cycleClosesAt: string | null = request.closes_at ?? null;
-
-  const isCycle = request.request_type === "cycle";
-
-  // "Definitivo" cuando ya no puede cambiar más. Para un 360: solo el
-  // propio solicitante finalizándolo a mano (status = 'closed') —
-  // "el usuario es el dueño de su proceso, no las condiciones" (sección
-  // 4.1): ni la fecha ni el 100% de respuestas cierran nada solos. Para
-  // el flujo ágil, que no se tocó, sigue el criterio anterior.
-  const isFinal = isCycle
-    ? request.status === "closed"
-    : request.status === "closed" ||
-      (totalInvitees != null && totalResponseCount >= totalInvitees);
+  const cycleClosesAt: string | null = request.closesAt ?? null;
 
   // Comentarios de texto (y la interpretación de IA, más abajo) de un 360
   // esperan a que el solicitante lo finalice — nunca solo con el 80%. En
@@ -382,53 +282,45 @@ export default async function FeedbackRequestPage({
   // La autoevaluación no se muestra aquí (texto/escala en crudo): queda
   // guardada para una futura comparativa con gráfica frente a la media
   // global o por grupos, no para listarla tal cual en esta vista.
-  const peerGroups = showRestrictedContent ? await loadQuestionGroups(supabase, id, false) : [];
+  const peerGroups = showRestrictedContent ? await loadQuestionGroups(id, false) : [];
 
-  const cycleName = (request.feedback_cycles as unknown as { name: string } | null)?.name;
+  const cycleName = request.cycleName;
   // "Ciclo 360 " / "Feedback ágil " es siempre el prefijo — la persona
   // solo escribe lo que sigue (ver el label de cada formulario de
   // creación, que ya deja esto claro para no duplicar palabras).
-  const fallbackDate = `del ${new Date(request.created_at).toLocaleDateString("es-ES")}`;
+  const fallbackDate = `del ${new Date(request.createdAt).toLocaleDateString("es-ES")}`;
   const requestLabel = isCycle
     ? `Ciclo 360 ${cycleName || request.name || fallbackDate}`
     : `Feedback ágil ${request.name || fallbackDate}`;
 
-  const { data: competencyNarrativeData } = revealed && !isCycle
-    ? await supabase.rpc("get_request_competency_narrative", { p_request_id: id })
-    : { data: null };
-  const competencyNarrative = (competencyNarrativeData as CompetencyNarrativeRow[] | null) || [];
+  const competencyNarrative =
+    revealed && !isCycle ? await feedbackManager.getCompetencyNarrative(id) : [];
 
-  const { data: competencyComparisonData } = revealed && isCycle
-    ? await supabase.rpc("get_request_competency_comparison", { p_request_id: id })
-    : { data: null };
   const competencyComparison =
-    (competencyComparisonData as CompetencyComparisonRow[] | null) || [];
+    revealed && isCycle ? await feedbackManager.getRequestCompetencyComparison(id) : [];
 
-  const { data: competencyByCategoryData } = revealed && isCycle
-    ? await supabase.rpc("get_request_competency_by_category", { p_request_id: id })
-    : { data: null };
   const competencyByCategory =
-    (competencyByCategoryData as CompetencyByCategoryRow[] | null) || [];
+    revealed && isCycle ? await feedbackManager.getRequestCompetencyByCategory(id) : [];
 
-  const { data: saboteadoresData } = isCycle && showRestrictedContent
-    ? await supabase.rpc("get_request_saboteadores", { p_request_id: id })
-    : { data: null };
-  const saboteadores = (saboteadoresData as SaboteadorRow[] | null) || [];
+  const saboteadores =
+    isCycle && showRestrictedContent ? await feedbackManager.getRequestSaboteadores(id) : [];
 
-  // Para resaltar cada mención de una competencia dentro del texto de la
-  // interpretación por IA, con su descripción real como tooltip —
-  // mismo dato que ya usa la Biblioteca, sin duplicar el texto.
-  const { data: competencyFrameworksData } =
-    isCycle && showRestrictedContent && (request.ai_interpretation || request.ai_saboteadores_text)
-      ? await supabase.from("competency_frameworks").select("name, description")
-      : { data: null };
-  const competencyDescriptions = (
-    (competencyFrameworksData as { name: string; description: string | null }[] | null) || []
-  )
-    .filter((c): c is { name: string; description: string } => Boolean(c.description))
-    .map((c) => ({ name: c.name, description: c.description }));
+  // Story 7.3: la interpretación por IA en 3 partes (competencias /
+  // saboteadores / resumen de respuestas abiertas), y el catálogo de
+  // competencias (con descripción) que InterpretationText usa para
+  // resaltar cada mención con su tooltip -- mismo dato que ya usa la
+  // Biblioteca, sin duplicar texto. Ambos solo se leen cuando de verdad
+  // van a mostrarse, mismo guard que el resto del contenido restringido.
+  const savedInterpretation =
+    isCycle && showRestrictedContent ? await aiInterpretationManager.getSavedProfileInterpretation(id) : null;
 
-  const isAdHocOpen = request.request_type === "ad_hoc" && request.status === "open";
+  const competencyDescriptions = savedInterpretation
+    ? (await membersManager.listCompetencyFrameworks())
+        .filter((f): f is typeof f & { description: string } => Boolean(f.description))
+        .map((f) => ({ name: f.name, description: f.description }))
+    : [];
+
+  const isAdHocOpen = request.requestType === "ad_hoc" && request.status === "open";
   const canManage = isAdHocOpen && totalResponseCount === 0;
 
   // Solo para decidir si se muestra el enlace a "Gestionar evaluadores" —
@@ -436,82 +328,76 @@ export default async function FeedbackRequestPage({
   // completa de si todavía se puede modificar algo.
   const canLinkToManageCycle = isCycle && request.status === "open" && !isFinal;
 
-  // Cuenta individual (invita por email suelto, sin compañeros que
-  // buscar) vs. empresa (invita eligiendo entre sus `members`) — dos
-  // formas de gestionar la misma sección "Gestionar solicitud".
-  const isIndividualAccount =
-    (currentMember?.organizations as unknown as { kind: string } | null)?.kind === "individual";
+  const isIndividualAccount = currentMember.organization?.kind === "individual";
 
   let colleagues: ColleagueRow[] | null = null;
   let currentInviteeIds: string[] = [];
   let currentInviteeEmails: string[] = [];
   let minInvitees = 5;
   if (canManage) {
-    const { data: settings } = await supabase
-      .from("platform_settings")
-      .select("min_invitees_per_request")
-      .eq("organization_id", currentMember.organization_id)
-      .maybeSingle();
-    minInvitees = settings?.min_invitees_per_request ?? 5;
+    minInvitees = await feedbackManager.getMinInviteesPerRequest(currentMember.organizationId);
 
     if (isIndividualAccount) {
-      const { data: invitations } = await supabase
-        .from("feedback_invitations")
-        .select("invitee_email")
-        .eq("feedback_request_id", id);
-      currentInviteeEmails = (invitations || [])
-        .map((i) => i.invitee_email)
-        .filter((v): v is string => Boolean(v));
+      const invitations = await feedbackManager.getFeedbackRequestEmailInvitations(id);
+      currentInviteeEmails = invitations.map((i) => i.email);
     } else {
-      const { data: colleaguesData } = await supabase
-        .from("members")
-        .select("id, email, full_name")
-        .eq("status", "active")
-        .eq("is_supervisor", false)
-        .neq("id", currentMember.id)
-        .order("email");
-      colleagues = colleaguesData;
+      const colleaguesRaw = await feedbackManager.getEvaluatorCandidates(currentMember.id);
+      colleagues = colleaguesRaw.map((c) => ({ id: c.id, email: c.email, full_name: c.fullName }));
 
-      const { data: invitations } = await supabase
-        .from("feedback_invitations")
-        .select("invitee_member_id")
-        .eq("feedback_request_id", id);
-      currentInviteeIds = (invitations || [])
-        .map((i) => i.invitee_member_id)
-        .filter((v): v is string => Boolean(v));
+      currentInviteeIds = await feedbackManager.getFeedbackRequestInviteeMemberIds(id);
     }
   }
+
+  // Story 7.6: reveal-progress and finalize-confirm copy moved to
+  // platform_texts (supabase/migrations/0089_simplify_reveal_and_finalize_
+  // texts.sql) -- same mechanism as every other editable text in this app,
+  // replacing the hardcoded strings below (including the old 80%-of-
+  // responses branch, which get_feedback_request_progress no longer
+  // computes at all: `revealed` already reflects the simplified condition
+  // by the time it reaches this page, so there is nothing left here to
+  // branch on). `feedbackManager.getPlatformText` is an existing export --
+  // read-only import, no edit to that file.
+  const [progressPendingMessage, progressSelfReminder, finalizeConfirmMessage] = await Promise.all([
+    feedbackManager.getPlatformText(
+      "progress_pending_message",
+      "Han respondido {respondidas} de {necesarias} necesarias para poder ver algo. Nadie sabe quién ha respondido ya."
+    ),
+    feedbackManager.getPlatformText(
+      "progress_pending_self_reminder",
+      "Además, hasta que no hagas tu propia autoevaluación tampoco podrás ver cómo te ven los demás."
+    ),
+    feedbackManager.getPlatformText(
+      "finalize_confirm_message",
+      "Si finalizas tu informe ahora, {pendientes} personas que todavía no han respondido no tendrán opción de hacerlo. ¿Seguro que quieres finalizarlo?"
+    ),
+  ]);
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">{requestLabel}</h1>
-        <Link href="/dashboard" className="text-sm underline text-gray-600">
+        <h1 className="text-2xl font-semibold text-ink">{requestLabel}</h1>
+        <Link href="/dashboard" className="text-sm underline text-ink-soft">
           Volver al panel
         </Link>
       </div>
 
-      {error && (
-        <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
-      )}
+      {error && <ErrorBanner>{error}</ErrorBanner>}
 
       {request.status === "closed" && (
-        <p className="mb-6 rounded bg-gray-50 text-gray-600 text-sm p-3">
-          Esta solicitud está {(progress?.response_count ?? 0) > 0 ? "completada" : "cancelada"}.
+        <p className="mb-6 rounded-brujula-md bg-surface-2 text-ink-soft text-sm p-3">
+          Esta solicitud está {(progress?.responseCount ?? 0) > 0 ? "completada" : "cancelada"}.
         </p>
       )}
 
       {isAdHocOpen && (
-        <section className="mb-10 border rounded p-4">
-          <p className="text-sm font-medium mb-3">Gestionar solicitud</p>
+        <Card className="mb-10">
+          <p className="text-sm font-medium text-ink mb-3">Gestionar solicitud</p>
 
           {canManage ? (
             <>
-              <p className="text-xs text-gray-500 mb-4">
-                Todavía nadie ha respondido — puedes ver a quién ya invitaste
-                (sin saber si ha respondido o no), añadir más gente, o
-                cancelar la solicitud. Ya no se puede quitar ni cambiar a
-                quien ya invitaste.
+              <p className="text-xs text-ink-soft mb-4">
+                Todavía nadie ha respondido, así que puedes cambiar a quién
+                invitaste o cancelarla.
               </p>
               {isIndividualAccount ? (
                 <form
@@ -519,11 +405,22 @@ export default async function FeedbackRequestPage({
                   className="flex flex-col gap-3 mb-4"
                 >
                   <input type="hidden" name="requestId" value={id} />
+                  {
+                    // canModifyExisting=true matches the member-id branch
+                    // below (EvaluatorPicker, no canModifyExisting prop ->
+                    // its own default also allows unchecking) -- deliberately
+                    // consistent with it, not a new gap: the underlying RPC
+                    // (update_ad_hoc_feedback_request_evaluators_for_individual,
+                    // db/feedback.ts) is add-only regardless of this flag, so
+                    // unchecking an already-invited email here is silently
+                    // ignored server-side, same latent UX/RPC mismatch its
+                    // sibling already has (deferred-work.md).
+                  }
                   <EmailEvaluatorPicker
                     fieldName="inviteeEmails"
                     minEmails={minInvitees}
                     defaultEmails={currentInviteeEmails}
-                    canModifyExisting={false}
+                    canModifyExisting
                     submitLabel="Guardar cambios"
                   />
                 </form>
@@ -538,19 +435,18 @@ export default async function FeedbackRequestPage({
                     checkboxName="inviteeIds"
                     defaultCheckedIds={currentInviteeIds}
                     minSelected={minInvitees}
-                    canModifyExisting={false}
                   />
                 </form>
               )}
               <form action={cancelFeedbackRequest} className="inline">
                 <input type="hidden" name="requestId" value={id} />
-                <button type="submit" className="text-sm underline text-red-700">
+                <button type="submit" className="text-sm underline text-ink-soft hover:text-ink">
                   Cancelar solicitud
                 </button>
               </form>
             </>
           ) : (
-            <p className="text-xs text-gray-500 mb-4">
+            <p className="text-xs text-ink-soft mb-4">
               Ya hay respuestas, así que no se puede cancelar ni cambiar a
               quién invitaste. Cuando ya no necesites seguir recibiendo
               respuestas, márcala como completada para poder pedir feedback
@@ -560,20 +456,20 @@ export default async function FeedbackRequestPage({
 
           <form action={closeFeedbackRequest} className="mt-3">
             <input type="hidden" name="requestId" value={id} />
-            <button type="submit" className="text-sm underline text-gray-700">
+            <button type="submit" className="text-sm underline text-ink-soft hover:text-ink">
               Marcar como completada
             </button>
           </form>
-        </section>
+        </Card>
       )}
 
       <section>
         <div className="flex items-center gap-2 mb-4">
-          <h2 className="text-sm font-medium text-gray-500">Respuestas de compañeros</h2>
+          <h2 className="text-sm font-medium text-ink-soft">Respuestas de compañeros</h2>
           {isCycle && canLinkToManageCycle && (
             <Link
               href={`/dashboard/feedback/${id}/gestionar`}
-              className="text-xs underline text-gray-600"
+              className="text-xs underline text-ink-soft"
             >
               Gestionar evaluadores
             </Link>
@@ -581,8 +477,8 @@ export default async function FeedbackRequestPage({
           {revealed && (
             <span
               className={
-                "text-xs rounded-full px-2 py-0.5 " +
-                (isFinal ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700")
+                "text-xs font-caption text-caption rounded-full px-2 py-0.5 " +
+                (isFinal ? "bg-indigo-wash text-indigo-deep" : "bg-surface-2 text-ink-soft")
               }
             >
               {isFinal ? "definitivo" : "preliminar"}
@@ -590,85 +486,98 @@ export default async function FeedbackRequestPage({
           )}
         </div>
         {!revealed ? (
-          <p className="text-sm text-gray-600">
-            {progressPendingMessage
-              .replace("{respondidas}", String(progress?.response_count ?? 0))
-              .replace("{necesarias}", String(progress?.threshold ?? 3))}
-            {isCycle && !progress?.self_responded && <> {progressSelfReminder}</>}
-          </p>
+          // Threshold-not-met (EXPERIENCE.md "Threshold empty state"):
+          // reassuring progress copy in indigo-wash, never gray/red -- this
+          // is progress, not failure. No RevealButton exists yet (there's
+          // nothing to reveal).
+          <div className="rounded-brujula-md bg-indigo-wash text-ink text-sm p-4">
+            <p>
+              {progressPendingMessage
+                .replaceAll("{respondidas}", String(progress?.responseCount ?? 0))
+                .replaceAll("{necesarias}", String(progress?.threshold ?? 3))}
+              {isCycle && !progress?.selfResponded && <> {progressSelfReminder}</>}
+            </p>
+          </div>
         ) : (
           <>
             {!isFinal && !isCycle && (
-              <p className="text-xs text-gray-500 mb-4">
+              <p className="text-xs text-ink-soft mb-4">
                 Todavía puede cambiar: faltan respuestas por llegar
                 {cycleClosesAt ? ` o que se cierre el ${cycleClosesAt}` : ""}.
               </p>
             )}
             {isCycle && !isFinal && (
-              <div className="mb-6 border rounded-lg p-4">
-                <p className="text-xs text-gray-500 mb-3">
-                  {preliminaryNotice.replace("{fecha}", cycleClosesAt ?? "sin definir")}
+              <Card className="mb-6">
+                <p className="text-xs text-ink-soft mb-3">
+                  Es preliminar: de momento solo ves los datos agregados. Han
+                  respondido {totalResponseCount} de {totalInvitees} evaluadores.
+                  Los comentarios de texto y la interpretación de tu perfil se
+                  desbloquean cuando tú decidas finalizarlo — no antes, y no
+                  automáticamente.
                 </p>
                 <FinalizeReportButton
                   requestId={id}
                   action={finalizeCycleRequest}
-                  confirmMessage={finalizeConfirmMessage.replace(
+                  // Ideally this "still-pending" count would be a manager-
+                  // computed field on FeedbackRequestState (same convention
+                  // as getRequestHeadlineSummary just above), not arithmetic
+                  // here -- but that needs a feedbackManager.ts edit, and
+                  // this file's own scope for this story is the
+                  // reveal-condition text, not a new manager export in a
+                  // file owned by a parallel story right now. Low-stakes:
+                  // feeds only this confirm dialog's display copy, never a
+                  // branch/decision.
+                  confirmMessage={finalizeConfirmMessage.replaceAll(
                     "{pendientes}",
-                    String(Math.max((totalInvitees ?? 0) - totalResponseCount, 0))
+                    String(Math.max(totalInvitees - totalResponseCount, 0))
                   )}
                 />
-              </div>
+              </Card>
             )}
             {isCycle && isFinal && cycleClosesAt && (
-              <p className="text-xs text-gray-500 mb-4">Cerrado el {cycleClosesAt}.</p>
+              <p className="text-xs text-ink-soft mb-4">Cerrado el {cycleClosesAt}.</p>
             )}
-            {showRestrictedContent && request.ai_interpretation && (
-              <div className="mb-8 border rounded-lg p-4 bg-gray-50">
-                <p className="text-xs font-semibold text-gray-500 mb-2">
+            {isCycle && showRestrictedContent && savedInterpretation?.competencias && (
+              <Card className="mb-8 max-w-prose">
+                <p className="text-xs font-semibold text-ink-soft mb-2">
                   Interpretación de tu perfil{" "}
-                  <span className="font-normal text-gray-400">(generado por IA)</span>
+                  <span className="font-normal text-ink-soft">(generado por IA)</span>
                 </p>
-                <div className="text-sm text-gray-700">
-                  <InterpretationText
-                    text={request.ai_interpretation}
-                    competencies={competencyDescriptions}
-                  />
+                <div className="text-sm text-ink leading-relaxed">
+                  <InterpretationText text={savedInterpretation.competencias} competencies={competencyDescriptions} />
                 </div>
-              </div>
+              </Card>
             )}
             {isCycle ? (
               <CompetencyComparison rows={competencyComparison} byCategoryRows={competencyByCategory} />
             ) : (
               <CompetencyNarrativeReport rows={competencyNarrative} />
             )}
-            {isCycle && showRestrictedContent && request.ai_saboteadores_text && (
-              <div className="mb-4 border rounded-lg p-4 bg-gray-50">
-                <p className="text-xs font-semibold text-gray-500 mb-2">
+            {isCycle && showRestrictedContent && savedInterpretation?.saboteadores && (
+              <Card className="mb-4 max-w-prose">
+                <p className="text-xs font-semibold text-ink-soft mb-2">
                   Sobre tus saboteadores{" "}
-                  <span className="font-normal text-gray-400">(generado por IA)</span>
+                  <span className="font-normal text-ink-soft">(generado por IA)</span>
                 </p>
-                <div className="text-sm text-gray-700">
-                  <InterpretationText
-                    text={request.ai_saboteadores_text}
-                    competencies={competencyDescriptions}
-                  />
+                <div className="text-sm text-ink leading-relaxed">
+                  <InterpretationText text={savedInterpretation.saboteadores} competencies={competencyDescriptions} />
                 </div>
-              </div>
+              </Card>
             )}
             {isCycle && showRestrictedContent && <SaboteadoresReport rows={saboteadores} />}
-            {showRestrictedContent && request.ai_open_answers_text && (
-              <div className="mb-4 border rounded-lg p-4 bg-gray-50">
-                <p className="text-xs font-semibold text-gray-500 mb-2">
+            {isCycle && showRestrictedContent && savedInterpretation?.resumenAbiertas && (
+              <Card className="mb-4 max-w-prose">
+                <p className="text-xs font-semibold text-ink-soft mb-2">
                   Resumen de las respuestas abiertas{" "}
-                  <span className="font-normal text-gray-400">(generado por IA)</span>
+                  <span className="font-normal text-ink-soft">(generado por IA)</span>
                 </p>
-                <div className="text-sm text-gray-700">
+                <div className="text-sm text-ink leading-relaxed">
                   <InterpretationText
-                    text={request.ai_open_answers_text}
+                    text={savedInterpretation.resumenAbiertas}
                     competencies={competencyDescriptions}
                   />
                 </div>
-              </div>
+              </Card>
             )}
             <QuestionGroupList groups={peerGroups} />
           </>

@@ -2,6 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { updateOrganizationName } from "@/app/actions/admin";
+import Card from "@/components/ui/Card";
+import AggregateBadge from "@/components/ui/AggregateBadge";
+import ButtonPrimary from "@/components/ui/ButtonPrimary";
+import ErrorBanner from "@/components/ui/ErrorBanner";
+import PermissionDenied from "@/components/ui/PermissionDenied";
 
 type MemberRow = {
   id: string;
@@ -40,16 +45,7 @@ export default async function AdminOrganizationMembersPage({
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
 
   if (!isAdmin) {
-    return (
-      <main className="flex-1 flex items-center justify-center p-8">
-        <div className="max-w-md text-center">
-          <p className="mb-4">No tienes acceso a esta sección.</p>
-          <Link href="/dashboard" className="underline text-sm">
-            Volver
-          </Link>
-        </div>
-      </main>
-    );
+    return <PermissionDenied message="No tienes acceso a esta sección." />;
   }
 
   const { data: organizations } = await supabase.rpc("list_organizations");
@@ -60,73 +56,86 @@ export default async function AdminOrganizationMembersPage({
   const { data: members } = await supabase.rpc("list_organization_members", {
     p_org_id: id,
   });
+  const memberList = (members as MemberRow[] | null) || [];
 
   return (
-    <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
+    <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">
-          {organization?.name || "Empresa"}
-        </h1>
-        <Link href="/admin" className="text-sm underline text-gray-600">
+        <h1 className="text-2xl font-semibold">{organization?.name || "Empresa"}</h1>
+        <Link href="/admin" className="text-sm underline text-ink-soft">
           Volver a empresas
         </Link>
       </div>
 
       {updated && (
-        <p className="mb-6 rounded bg-green-50 text-green-700 text-sm p-3">
+        <div className="mb-6 rounded-brujula-md bg-indigo-wash text-ink text-sm p-3">
           Empresa actualizada.
-        </p>
+        </div>
       )}
 
-      {error && (
-        <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
-      )}
+      {error && <ErrorBanner>{error}</ErrorBanner>}
 
-      <form action={updateOrganizationName} className="flex items-center gap-2 mb-8 border rounded p-4">
+      <form
+        action={updateOrganizationName}
+        className="flex items-center gap-2 bg-paper-deep rounded-brujula-lg shadow-card p-6 mb-8"
+      >
         <input type="hidden" name="orgId" value={id} />
         <input
           name="newName"
           defaultValue={organization?.name}
-          className="border rounded px-2 py-1 text-sm flex-1"
+          className="border border-line rounded-brujula-sm px-2 py-1 text-sm flex-1 bg-paper-deep text-ink"
         />
-        <button type="submit" className="text-sm underline text-gray-700 whitespace-nowrap">
+        <ButtonPrimary type="submit" className="px-4 py-2 whitespace-nowrap">
           Guardar nombre
-        </button>
+        </ButtonPrimary>
       </form>
 
-      <h2 className="text-sm font-medium text-gray-700 mb-3">Empleados</h2>
+      <section>
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-sm font-medium text-ink-soft">Empleados</h2>
+          {memberList.length > 0 && (
+            <AggregateBadge className="px-3 py-1">
+              Vista agregada — {memberList.length} {memberList.length === 1 ? "empleado" : "empleados"}
+            </AggregateBadge>
+          )}
+        </div>
 
-      {!members || members.length === 0 ? (
-        <p className="text-sm text-gray-500">Esta empresa todavía no tiene empleados.</p>
-      ) : (
-        <ul className="flex flex-col divide-y border rounded">
-          {(members as MemberRow[]).map((member) => (
-            <li key={member.id} className="flex items-center justify-between px-4 py-3 text-sm">
-              <div>
-                <p className="font-medium">{member.full_name || member.email}</p>
-                <p className="text-gray-500">
-                  {member.email} · {member.department_name || "—"}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {member.is_supervisor && (
-                  <span className="text-xs rounded-full bg-gray-100 px-2 py-1">supervisor</span>
-                )}
-                <span
-                  className={
-                    "text-xs rounded-full px-2 py-1 " +
-                    (member.status === "active"
-                      ? "bg-green-50 text-green-700"
-                      : "bg-amber-50 text-amber-700")
-                  }
-                >
-                  {member.status === "active" ? "activo" : "invitado"}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+        {memberList.length === 0 ? (
+          <Card>
+            <p className="text-sm text-ink-soft">Esta empresa todavía no tiene empleados.</p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {memberList.map((member) => (
+              <Card key={member.id} className="flex flex-col gap-2 overflow-hidden">
+                <div>
+                  <p className="font-medium text-ink truncate">{member.full_name || member.email}</p>
+                  <p className="text-xs text-ink-soft break-words">
+                    {member.email} · {member.department_name || "—"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {member.is_supervisor && (
+                    <span className="text-xs rounded-full bg-surface-2 text-ink-soft px-2 py-1">
+                      supervisor
+                    </span>
+                  )}
+                  <span
+                    className={
+                      "text-xs rounded-full px-2 py-1 " +
+                      (member.status === "active"
+                        ? "bg-indigo-wash text-ink"
+                        : "bg-surface-2 text-ink-soft")
+                    }
+                  >
+                    {member.status === "active" ? "activo" : "invitado"}
+                  </span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
 }

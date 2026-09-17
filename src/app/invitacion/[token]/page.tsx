@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
 import { acceptInviteSignUp } from "@/app/actions/auth";
+import * as responderManager from "@/server/managers/responderManager";
 
 type InviteDetails = {
   organization_name: string;
@@ -18,10 +18,25 @@ export default async function InvitationPage({
 }) {
   const { token } = await params;
   const { error } = await searchParams;
-  const supabase = await createClient();
 
-  const { data } = await supabase.rpc("get_invite_details", { p_token: token });
-  const invite = (data as InviteDetails[] | null)?.[0];
+  let invite: InviteDetails | undefined;
+
+  try {
+    const rows = await responderManager.getInviteDetails(token);
+    const row = rows[0];
+    invite = row
+      ? {
+          organization_name: row.organizationName,
+          email: row.email,
+          full_name: row.fullName,
+          valid: row.valid,
+        }
+      : undefined;
+  } catch {
+    // A malformed token (not UUID-shaped) makes the RPC throw via
+    // db/responder.ts's error convention -- fall through to invalid.
+    invite = undefined;
+  }
 
   if (!invite || !invite.valid) {
     return (

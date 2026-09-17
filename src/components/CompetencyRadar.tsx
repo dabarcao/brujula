@@ -53,6 +53,11 @@ export const GROUP_ORDER: Record<string, number> = {
 };
 
 export const GROUP_LABELS: Record<string, string> = {
+  // Code stays "visionario" (competency_roles.code, unchanged on purpose by
+  // the model-v2 migration so existing frontend indexing by code wouldn't
+  // break) -- only the display name changed, to "Visión" (renumbered
+  // 0072_competency_model_v2.sql). Found stale while building Story 7.3's
+  // CompetencyModelDiagram.tsx, which reads the real DB name instead.
   visionario: "Visión",
   arquitecto: "Arquitecto",
   catalizador: "Catalizador",
@@ -169,7 +174,7 @@ export default function CompetencyRadar({
     if (a.dataX != null && a.dataY != null && b.dataX != null && b.dataY != null) {
       segments.push({
         d: `M ${a.dataX} ${a.dataY} L ${b.dataX} ${b.dataY}`,
-        color: "#9ca3af",
+        color: "var(--ink-soft)",
       });
     }
   }
@@ -196,7 +201,7 @@ export default function CompetencyRadar({
 
   return (
     <div className="flex flex-col items-center" style={{ width: "100%", maxWidth: size }}>
-      {caption && <p className="text-xs text-gray-500 mb-2 text-center">{caption}</p>}
+      {caption && <p className="text-xs text-ink-soft mb-2 text-center">{caption}</p>}
       <svg viewBox={`0 0 ${size} ${size}`} width="100%" style={{ maxWidth: size }}>
         {quadrants.map((q) => (
           <path key={`quadrant-${q.code}`} d={q.d} fill={GROUP_COLORS[q.code] || DEFAULT_COLOR} opacity={0.07} />
@@ -221,7 +226,7 @@ export default function CompetencyRadar({
             key={ring.level}
             points={ring.ringPoints}
             fill="none"
-            stroke="#e5e7eb"
+            stroke="var(--line)"
             strokeWidth={1}
           />
         ))}
@@ -232,7 +237,7 @@ export default function CompetencyRadar({
             y1={center}
             x2={p.axisX}
             y2={p.axisY}
-            stroke="#e5e7eb"
+            stroke="var(--line)"
             strokeWidth={1}
           />
         ))}
@@ -246,12 +251,12 @@ export default function CompetencyRadar({
         )}
         {hasAnySelf &&
           selfSegments.map((d, i) => (
-            <path key={`self-${i}`} d={d} fill="none" stroke="#111827" strokeWidth={2} />
+            <path key={`self-${i}`} d={d} fill="none" stroke="var(--ink)" strokeWidth={2} />
           ))}
         {hasAnySelf &&
           selfPoints.map((p) =>
             p.x != null && p.y != null ? (
-              <circle key={`selfdot-${p.code}`} cx={p.x} cy={p.y} r={3.5} fill="#111827" />
+              <circle key={`selfdot-${p.code}`} cx={p.x} cy={p.y} r={3.5} fill="var(--ink)" />
             ) : null
           )}
         {points.map((p) => (
@@ -276,7 +281,7 @@ export default function CompetencyRadar({
         ))}
       </svg>
       {!showQuadrants && (
-        <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 mt-1">
+        <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-soft mt-1">
           {groupsPresent.map((code) => (
             <span key={code} className="flex items-center gap-1.5">
               <span

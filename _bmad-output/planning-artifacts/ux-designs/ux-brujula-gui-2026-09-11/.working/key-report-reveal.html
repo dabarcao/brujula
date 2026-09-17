@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Brújula — Informe 360 (mock)</title>
+<style>
+  /* Governs: EXPERIENCE.md "Revealed vs. not-yet-revealed" (State Patterns),
+     "Reveal gate" (Component Patterns), Key Flow "Marta opens her first 360
+     report". DESIGN.md: Colors (indigo/coral/role-*/intensity/saboteador),
+     Shapes, Elevation, Components (reveal-button, card, card-accent,
+     role-badge, saboteador-bar, intensity-scale).
+     Fonts: system stack here (offline mock) standing in for Sora/Inter —
+     the real app loads both via next/font. No JS, no network. */
+  :root{
+    --paper:#F7F4EE; --paper-deep:#FFFFFF; --ink:#1C2033; --ink-soft:#5B5F7A;
+    --line:#E4DFD3; --indigo:#3B4FA6; --indigo-deep:#232F73; --indigo-wash:#E7EAF7;
+    --coral:#FF6B4A;
+    --role-visionario:#3B4FA6; --role-arquitecto:#0E8074; --role-catalizador:#FF6B4A;
+    --role-catalizador-deep:#A8391F; --role-coach:#C98A2E; --role-coach-deep:#8F6321;
+    --role-plenitud:#8B4B9E; --coral-deep:#A8391F;
+    --sabo-tint:#B56A4C; --sabo-wash:#F7E6DE;
+    --display: "Sora","Segoe UI Semibold",system-ui,sans-serif;
+    --body: "Inter","Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#d8d3c4;font-family:var(--body);padding:32px;}
+  .device{max-width:900px;margin:0 auto;background:var(--paper);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;}
+  .chrome{background:var(--paper-deep);border-bottom:1px solid var(--line);padding:14px 28px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--ink-soft);}
+  .chrome b{color:var(--ink);font-family:var(--display);font-weight:700;}
+  .wrap{padding:32px 40px 48px;}
+  .state-label{font-family:var(--body);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--coral);font-weight:600;margin-bottom:10px;}
+  h1{font-family:var(--display);font-size:24px;font-weight:700;color:var(--ink);margin:0 0 4px;}
+  .sub{color:var(--ink-soft);font-size:14px;margin-bottom:24px;}
+  .card{background:var(--paper-deep);border-radius:22px;box-shadow:0 1px 2px rgba(28,32,58,.06),0 8px 20px rgba(28,32,58,.08);padding:24px;margin-bottom:20px;}
+  .strength-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--role-arquitecto);font-weight:600;}
+  .strength{font-family:var(--display);font-size:19px;font-weight:600;color:var(--ink);margin:6px 0 14px;}
+  .growth-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;}
+  .growth{font-family:var(--body);font-size:15px;color:var(--ink);margin:6px 0 0;}
+  .reveal-btn{display:inline-flex;align-items:center;gap:8px;background:var(--coral-deep);color:#fff;border:none;padding:14px 26px;border-radius:9999px;font-family:var(--display);font-weight:600;font-size:14px;box-shadow:0 14px 32px rgba(255,107,74,.28);margin-top:8px;outline-offset:2px;}
+  .reveal-btn:focus-visible{outline:2px solid var(--paper-deep);}
+  .divider{border-top:1px dashed var(--line);margin:36px 0;padding-top:28px;}
+  .radar-row{display:flex;gap:28px;align-items:center;flex-wrap:wrap;}
+  svg{flex:none;}
+  .role-list{display:flex;flex-direction:column;gap:8px;font-size:13px;}
+  .role-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:9999px;font-weight:600;font-size:12px;color:#fff;}
+  .table{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px;}
+  .table th{text-align:left;color:var(--ink-soft);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;border-bottom:1px solid var(--line);}
+  .table td{padding:8px 10px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;}
+  .sabo-title{font-family:var(--display);font-size:15px;font-weight:600;color:var(--ink);margin:0 0 4px;}
+  .sabo-note{font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;}
+  .sabo-row{display:flex;align-items:center;gap:12px;margin-bottom:8px;font-size:13px;}
+  .sabo-name{width:120px;color:var(--ink);}
+  .sabo-track{flex:1;height:8px;border-radius:8px;background:var(--sabo-wash);overflow:hidden;}
+  .sabo-fill{height:100%;background:var(--sabo-tint);border-radius:8px;}
+  .sabo-val{width:28px;text-align:right;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+</style>
+</head>
+<body>
+<div class="device">
+  <div class="chrome"><span><b>Brújula</b> · Feedback 360</span><span>Marta Álvarez</span></div>
+  <div class="wrap">
+
+    <div class="state-label">Estado 1 · antes de revelar</div>
+    <h1>Ciclo 360 Marta Álvarez — Q3 2026</h1>
+    <p class="sub">Cerrado el 8 de septiembre · 12 de 14 invitados respondieron</p>
+    <div class="card">
+      <div class="strength-label">Tu mayor fortaleza</div>
+      <div class="strength">Catalizador — mueves al equipo a la acción con claridad</div>
+      <div class="growth-label">Un área de crecimiento</div>
+      <div class="growth">Coach — tu equipo pide más espacio para desarrollarse contigo, no solo ejecutar.</div>
+      <button class="reveal-btn">🧭 Mostrar mis resultados</button>
+    </div>
+
+    <div class="divider">
+      <div class="state-label">Estado 2 · revelado</div>
+      <h1 style="font-size:19px;">Tu mapa de competencias</h1>
+      <div class="radar-row">
+        <svg width="260" height="260" viewBox="0 0 260 260">
+          <circle cx="130" cy="130" r="110" fill="none" stroke="#E4DFD3"/>
+          <circle cx="130" cy="130" r="73" fill="none" stroke="#E4DFD3"/>
+          <circle cx="130" cy="130" r="37" fill="none" stroke="#E4DFD3"/>
+          <path d="M130,130 L130,28 A102,102 0 0,1 217,79 Z" fill="var(--role-plenitud)" opacity=".55"/>
+          <path d="M130,130 L217,79 A102,102 0 0,1 224,175 Z" fill="var(--role-visionario)" opacity=".55"/>
+          <path d="M130,130 L224,175 A102,102 0 0,1 152,229 Z" fill="var(--role-arquitecto)" opacity=".55"/>
+          <path d="M130,130 L152,229 A102,102 0 0,1 60,222 Z" fill="var(--role-catalizador)" opacity=".7"/>
+          <path d="M130,130 L60,222 A102,102 0 0,1 130,28 Z" fill="var(--role-coach)" opacity=".4"/>
+          <circle cx="130" cy="130" r="3" fill="var(--ink)"/>
+        </svg>
+        <div class="role-list">
+          <span class="role-badge" style="background:var(--role-plenitud)">Plenitud</span>
+          <span class="role-badge" style="background:var(--role-visionario)">Visionario</span>
+          <span class="role-badge" style="background:var(--role-arquitecto)">Arquitecto</span>
+          <span class="role-badge" style="background:var(--role-catalizador-deep)">Catalizador · 4.6</span>
+          <span class="role-badge" style="background:var(--role-coach-deep)">Coach · 3.1</span>
+        </div>
+      </div>
+      <table class="table">
+        <tr><th>Competencia</th><th>Media</th><th>Autoevaluación</th></tr>
+        <tr><td>Orientación a resultados</td><td>4.7</td><td>4.0</td></tr>
+        <tr><td>Valentía</td><td>4.5</td><td>4.5</td></tr>
+        <tr><td>Coaching</td><td style="display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-flex;gap:2px;">
+            <i style="width:10px;height:10px;border-radius:2px;background:#EEF0FA;display:inline-block;"></i>
+            <i style="width:10px;height:10px;border-radius:2px;background:#C5CCEC;display:inline-block;"></i>
+            <i style="width:10px;height:10px;border-radius:2px;background:#8C98D4;display:inline-block;"></i>
+            <i style="width:10px;height:10px;border-radius:2px;background:#5563B6;display:inline-block;opacity:.3;"></i>
+            <i style="width:10px;height:10px;border-radius:2px;background:#232F73;display:inline-block;opacity:.2;"></i>
+          </span>3.0</td><td>3.5</td></tr>
+      </table>
+      <p style="font-size:11px;color:var(--ink-soft);margin-top:6px;">{components.intensity-scale} — el número siempre acompaña al medidor, nunca solo color.</p>
+
+      <div style="margin-top:28px;background:var(--sabo-wash);border-radius:14px;padding:18px 20px;">
+        <div class="sabo-title">Tus saboteadores</div>
+        <div class="sabo-note">Autoevaluación pura — sin comparar con nadie.</div>
+        <div class="sabo-row"><span class="sabo-name">Controlador</span><span class="sabo-track"><span class="sabo-fill" style="width:76%"></span></span><span class="sabo-val">3.8</span></div>
+        <div class="sabo-row"><span class="sabo-name">Perfeccionista</span><span class="sabo-track"><span class="sabo-fill" style="width:88%"></span></span><span class="sabo-val">4.4</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

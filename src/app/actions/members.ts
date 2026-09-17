@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { inviteNewMember, createNewDepartment } from "@/server/managers/membersManager";
 
 export async function inviteMember(formData: FormData) {
   const email = String(formData.get("email") || "").trim();
@@ -17,23 +17,20 @@ export async function inviteMember(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
-
-  const { data: inviteToken, error } = await supabase.rpc("invite_member", {
-    p_email: email,
-    p_full_name: fullName,
-    p_department_id: departmentId,
-    p_is_guest: isGuest,
-  });
-
-  if (error) {
-    redirect("/dashboard/members?error=" + encodeURIComponent(error.message));
+  let result: { inviteToken: string };
+  try {
+    result = await inviteNewMember(email, fullName, departmentId, isGuest);
+  } catch (e) {
+    redirect(
+      "/dashboard/members?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   revalidatePath("/dashboard/members");
   redirect(
     "/dashboard/members?invited=" +
-      encodeURIComponent(String(inviteToken)) +
+      encodeURIComponent(String(result.inviteToken)) +
       "&invitedEmail=" +
       encodeURIComponent(email)
   );
@@ -46,12 +43,13 @@ export async function createDepartment(formData: FormData) {
     redirect("/dashboard/members?error=" + encodeURIComponent("El nombre es obligatorio."));
   }
 
-  const supabase = await createClient();
-
-  const { error } = await supabase.rpc("create_department", { p_name: name });
-
-  if (error) {
-    redirect("/dashboard/members?error=" + encodeURIComponent(error.message));
+  try {
+    await createNewDepartment(name);
+  } catch (e) {
+    redirect(
+      "/dashboard/members?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   revalidatePath("/dashboard/members");

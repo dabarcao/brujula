@@ -1,26 +1,300 @@
 @import "tailwindcss";
 
+/*
+ * Brújula Segura design tokens (DESIGN.md).
+ *
+ * Pattern: every token is a plain custom property in `:root` (light value),
+ * mapped into Tailwind's `@theme` namespace so `bg-indigo`/`text-ink`/etc.
+ * exist as utilities, then re-declared inside the `prefers-color-scheme:
+ * dark` media query below — exactly how the original --background/
+ * --foreground pair worked. No `dark:` variant is needed anywhere else in
+ * the codebase; the utility classes just resolve to a different value.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light dark;
+
+  /* Neutrals */
+  --paper: #F7F4EE;
+  --paper-deep: #FFFFFF;
+  --surface-2: #EFEADD;
+  --ink: #1C2033;
+  --ink-soft: #5B5F7A;
+  --line: #E4DFD3;
+
+  /* Indigo — the sole authoritative accent.
+     Kairos Experience corporate colors (2026-09-18 rebrand, v2 after
+     feedback: light green preferred over dark for buttons): light green
+     rgb(140,180,60) as the primary accent (was indigo #3B4FA6, paired
+     with dark `--ink` text now, not white — see ButtonPrimary.tsx), dark
+     green rgb(20,95,55) as the secondary/energizing accent (was coral
+     #FF6B4A). Token names kept as "indigo"/"coral" on purpose — renaming
+     every `bg-indigo`/`text-coral-deep` utility across the codebase would
+     be a much bigger, purely-cosmetic diff for zero behavior change; the
+     CSS variable values are what actually paints the brand. */
+  --indigo: #8CB43C;
+  --indigo-deep: #145F37;
+  --indigo-wash: #EEF3E0;
+
+  /* Coral — the single energizing accent */
+  --coral: #145F37;
+  --coral-deep: #145F37;
+  --coral-wash: #E1ECE4;
+
+  /* Role colors (VACC + Plenitud) — visionario/catalizador stay tied to
+     indigo/coral respectively, same as before the rebrand. */
+  --role-visionario: #8CB43C;
+  --role-arquitecto: #0E8074;
+  --role-catalizador: #145F37;
+  --role-catalizador-deep: #0D3D23;
+  --role-coach: #C98A2E;
+  --role-coach-deep: #8F6321;
+  --role-plenitud: #8B4B9E;
+
+  /* Saboteadores — deliberately quieter than the role/radar palette */
+  --saboteador-tint: #B56A4C;
+  --saboteador-wash: #F7E6DE;
+
+  /* Score/agreement intensity ramp — indigo-only, never red/green as a
+     pass/fail signal (still true post-rebrand: this ramp follows
+     whichever color --indigo resolves to, not literal red/green
+     semantics). */
+  --intensity-1: #EAF1E5;
+  --intensity-2: #C3D9AE;
+  --intensity-3: #92BD70;
+  --intensity-4: #4F8A3A;
+  --intensity-5: #0D3D23;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Colors -> bg-, text-, border- utilities */
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-indigo: var(--indigo);
+  --color-indigo-deep: var(--indigo-deep);
+  --color-indigo-wash: var(--indigo-wash);
+  --color-coral: var(--coral);
+  --color-coral-deep: var(--coral-deep);
+  --color-coral-wash: var(--coral-wash);
+  --color-role-visionario: var(--role-visionario);
+  --color-role-arquitecto: var(--role-arquitecto);
+  --color-role-catalizador: var(--role-catalizador);
+  --color-role-catalizador-deep: var(--role-catalizador-deep);
+  --color-role-coach: var(--role-coach);
+  --color-role-coach-deep: var(--role-coach-deep);
+  --color-role-plenitud: var(--role-plenitud);
+  --color-saboteador-tint: var(--saboteador-tint);
+  --color-saboteador-wash: var(--saboteador-wash);
+  --color-intensity-1: var(--intensity-1);
+  --color-intensity-2: var(--intensity-2);
+  --color-intensity-3: var(--intensity-3);
+  --color-intensity-4: var(--intensity-4);
+  --color-intensity-5: var(--intensity-5);
+
+  /* Typography -> font-* family utilities (system stacks — no next/font/google,
+     see layout.tsx's own comment; Sora/Inter render only where installed
+     locally until a future story adds self-hosted static font files) */
+  --font-display: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  --font-heading: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  --font-heading-sm: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-caption: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-data: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  /* Repoints Tailwind's own `font-sans` (used by layout.tsx's <body>) at the
+     body stack instead of the scaffold's dangling --font-geist-sans var. */
+  --font-sans: var(--font-body);
+
+  /* Typography -> text-* size utilities (paired line-height/weight/tracking) */
+  --text-display: 32px;
+  --text-display--line-height: 40px;
+  --text-display--font-weight: 700;
+  --text-display--letter-spacing: -0.01em;
+  --text-heading: 26px;
+  --text-heading--line-height: 32px;
+  --text-heading--font-weight: 600;
+  --text-heading-sm: 20px;
+  --text-heading-sm--line-height: 26px;
+  --text-heading-sm--font-weight: 600;
+  --text-body: 16px;
+  --text-body--line-height: 1.6;
+  --text-caption: 13px;
+  --text-caption--line-height: 18px;
+  --text-caption--letter-spacing: 0.02em;
+
+  /* Shapes -> non-colliding rounded-brujula-* utilities. Tailwind v4 already
+     reserves --radius-sm/md/lg (and bare --radius) at its own stock values
+     (see node_modules/tailwindcss/theme.css) — overriding those directly
+     would silently reflow every existing, not-yet-redesigned page's plain
+     `rounded`/`rounded-sm`/`rounded-lg` usage. Future restyle stories (2.2+)
+     should reference `rounded-brujula-*` explicitly; bare `rounded-*` stays
+     at Tailwind's stock values until a later story deliberately migrates
+     the whole site. `rounded-full` needs no override — Tailwind's stock
+     value is already an effectively infinite radius. */
+  --radius-brujula-sm: 8px;
+  --radius-brujula-md: 14px;
+  --radius-brujula-lg: 22px;
+
+  /* Layout -> named spacing utility alongside the untouched numeric scale
+     (DESIGN.md's numbered steps already match Tailwind v4's default 4px
+     `--spacing` multiplier; only the named gutter is new) */
+  --spacing-gutter: 20px;
+
+  /* Elevation -> shadow-* utilities, all warm-tinted (never pure black) */
+  --shadow-card: 0 1px 2px rgba(28, 32, 58, 0.06), 0 8px 20px rgba(28, 32, 58, 0.08);
+  --shadow-raised: 0 10px 28px rgba(20, 95, 55, 0.18);
+  --shadow-floating: 0 14px 32px rgba(20, 95, 55, 0.28);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --paper: #171A2E;
+    --paper-deep: #20243D;
+    --surface-2: #282D4E;
+    --ink: #EFEEE6;
+    --ink-soft: #AEB2CC;
+    --line: #333861;
+    --indigo: #6FCB92;
+    --indigo-deep: #A8E6BE;
+    --indigo-wash: #1B3A28;
+    --coral: #3FBF7A;
+    --coral-deep: #3FBF7A;
+    --coral-wash: #24382B;
+    --role-visionario: #6FCB92;
+    --role-arquitecto: #3FBDAA;
+    --role-catalizador: #3FBF7A;
+    --role-catalizador-deep: #6BE0A0;
+    --role-coach: #E3B15E;
+    --role-coach-deep: #F0C989;
+    --role-plenitud: #C48AD9;
+    --saboteador-tint: #D9A98F;
+    --saboteador-wash: #3A2C27;
+    --intensity-1: #1E3323;
+    --intensity-2: #2E5236;
+    --intensity-3: #4F8A3A;
+    --intensity-4: #86C562;
+    --intensity-5: #A8E6BE;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
 }
+
+/* Tailwind's --font-* namespace only maps to font-family, so
+   typography.data's fontVariantNumeric (tabular figures for columns of
+   digits) needs a manual companion rule rather than a theme token. */
+.font-data {
+  font-variant-numeric: tabular-nums;
+}
+
+/* One-time entrance for the group-invite accept acknowledgment
+   (spec-2-7-invitacion-accept-decline-redesign.md), referenced via
+   Tailwind's `motion-safe:animate-[brujula-ack-in_...]` arbitrary value so
+   the animation only runs without `prefers-reduced-motion` -- under
+   reduced motion the element keeps its plain end-state styling and simply
+   has no `animate-*` utility applied, so it appears instantly instead. */
+@keyframes brujula-ack-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reveal-gate axis draw-in (spec-4-2-cycles-screens-redesign.md,
+   EXPERIENCE.md "Reveal -> draw-in"): per-axis entrance for
+   CompetencyRadar/CompetencyComparisonChart's SVG data (sectors, wedges,
+   dots, labels) once they mount fresh after the reveal toggle flips --
+   same `motion-safe:animate-[brujula-axis-in_..._both]` + inline
+   `animationDelay` pattern as `brujula-ack-in` above, one call site per
+   axis/sector index (~60ms apart). Under `prefers-reduced-motion: reduce`
+   the `motion-safe:` variant never applies the class at all, so the
+   element keeps the browser's default (fully opaque, unscaled) rendering
+   instantly -- content is never gated behind the animation itself, only
+   the stagger is removed. No `stroke-dashoffset` "literal pencil draw":
+   axis path lengths vary per report (15 vs 3 axes) and a fixed dasharray
+   would either not cover longer paths or leave visible dashes on shorter
+   ones -- opacity+scale reads as "drawing in" without that fragility.
+
+   `to`'s opacity was hardcoded to 1 -- with `fill-mode: both` that's the
+   value every caller was left at once the animation finished, silently
+   overriding whatever lower opacity (0.07 quadrant wedge, 0.3 quadrant
+   label) the element had set on itself for the "faint background hint"
+   look, so those wedges rendered fully solid instead. Fixed by reading a
+   `--brujula-target-opacity` custom property (set inline per call site,
+   default 1 for callers that really do want full opacity) instead of a
+   fixed value. */
+@keyframes brujula-axis-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: var(--brujula-target-opacity, 1);
+    transform: scale(1);
+  }
+}
+
+/* Wizard question transition (spec-4-4-responder-invitation-screens-
+   redesign.md, EXPERIENCE.md "Wizard step transition" -- a short ~200ms
+   slide/fade between questions, restricted to /responder/[token]).
+   Applied imperatively by ResponderWizard.tsx via a remove -> reflow ->
+   re-add cycle (never a React `key` change -- no question panel there is
+   ever unmounted, so typed answers survive) through the
+   `motion-safe:animate-[brujula-wizard-step-in_200ms_ease-out_both]`
+   utility. Under `prefers-reduced-motion: reduce`, Tailwind's own
+   `motion-safe:` gate never applies the class at all, so the swap between
+   `hidden`/visible panels is instant with no stagger -- the question text
+   itself is never gated behind this, only the motion is. */
+@keyframes brujula-wizard-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Final-submit checkmark celebration (spec-4-4-responder-invitation-
+   screens-redesign.md, frozen Intent: "must be visibly more restrained
+   than Story 2.7's existing one" -- AcceptAcknowledgment.tsx's own
+   coral-wash pill + copy + 0.4s entrance). Deliberately smaller and
+   quieter: a small icon-only badge, no copy, no full-width banner, no
+   coral (coral is this wizard's one already-spent trust cue, the
+   anonymity-badge emphasis on the challenge question -- reusing it here
+   too would compete with that moment on the same screen), scale+fade only,
+   shorter than brujula-ack-in. Post-review patch (spec-4-4, fix #3):
+   ResponderWizard.tsx used to gate this class's *element* itself behind
+   `prefers-reduced-motion`, leaving reduced-motion users with no
+   confirmation glyph at all -- it now only withholds the
+   `motion-safe:animate-*` utility, same as every other transition in that
+   file, so the static checkmark still renders, just without the pop. */
+@keyframes brujula-check-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Login page compass watermark (ad-hoc request, not a numbered story --
+   DESIGN.md "Brand & Style": "the compass is the brand's own motif ... not
+   a decoration"). Rediseñado 2026-09-17 como marca estática (trama de
+   puntos + inclinación CSS 3D, ver login/page.tsx's CompassWatermark) --
+   ya no gira ni pulsa, así que no necesita keyframes propios aquí.
+   `brujula-axis-in`, más abajo, sigue siendo de otro componente
+   (CompetencyComparisonChart). */

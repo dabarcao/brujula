@@ -2,9 +2,22 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import { generateAiInterpretation } from "@/lib/aiInterpretation";
-import { sendInvitationEmails, sendInvitationEmailsForNewInvitees } from "@/lib/invitationEmails";
+import * as cyclesManager from "@/server/managers/cyclesManager";
+import type { CycleParticipantCategory } from "@/server/managers/cyclesManager";
+import * as aiInterpretationManager from "@/server/managers/aiInterpretationManager";
+
+// Story 3.10 (_bmad-output/implementation-artifacts/
+// spec-3-10-cycles-server-actions-thin-delegates.md) introduced these 6
+// Server Actions as thin delegates to @/server/managers/cyclesManager, each
+// call site checking once. Story 5.1a (spec-5-1a-delete-old-path-cycles.md)
+// removed the old direct-Supabase path and the per-domain rollback-safety
+// flag that gated it -- these are now the only path.
+// `finalizeCycleRequest`'s AI-interpretation orchestration now goes through
+// `aiInterpretationManager` (Story 7.3) -- this file no longer constructs a
+// raw Supabase client at all, closing the 3rd and last eslint.config.mjs
+// `no-restricted-imports` exemption (removed by that same story). Still
+// called unconditionally and result-unchecked: generation/save are both
+// best-effort (never throw), same as before.
 
 export async function createFeedbackCycle(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
@@ -18,17 +31,13 @@ export async function createFeedbackCycle(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
-
-  const { error } = await supabase.rpc("create_feedback_cycle", {
-    p_name: name,
-    p_opens_at: opensAt,
-    p_closes_at: closesAt,
-    p_participant_member_ids: participantIds,
-  });
-
-  if (error) {
-    redirect("/dashboard/cycles/nueva?error=" + encodeURIComponent(error.message));
+  try {
+    await cyclesManager.createCycle(name, opensAt, closesAt, participantIds);
+  } catch (e) {
+    redirect(
+      "/dashboard/cycles/nueva?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   revalidatePath("/dashboard");
@@ -44,91 +53,73 @@ export async function createFeedbackCycle(formData: FormData) {
 export async function finalizeCycleRequest(formData: FormData) {
   const requestId = String(formData.get("requestId") || "");
 
-  const supabase = await createClient();
-
-  const { error } = await supabase.rpc("close_cycle_request", { p_request_id: requestId });
-
-  if (error) {
-    redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
+  try {
+    await cyclesManager.closeRequest(requestId);
+  } catch (e) {
+    redirect(
+      `/dashboard/feedback/${requestId}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
-  const result = await generateAiInterpretation(supabase, requestId);
+  // Story 7.3: `aiInterpretationManager.generateProfileInterpretation` +
+  // `saveProfileInterpretation` replace the old raw-Supabase-client call
+  // into src/lib/aiInterpretation.ts -- both never throw (missing API key,
+  // empty data, a failed Anthropic call, or a save failure all resolve
+  // silently), same contract the original call site had.
+  const result = await aiInterpretationManager.generateProfileInterpretation(requestId);
   if (result) {
-    await supabase.rpc("save_ai_interpretation", {
-      p_request_id: requestId,
-      p_text: result.competencias,
-      p_saboteadores_text: result.saboteadores,
-      p_open_answers_text: result.resumenAbiertas,
-    });
+    await aiInterpretationManager.saveProfileInterpretation(requestId, result);
   }
 
   revalidatePath(`/dashboard/feedback/${requestId}`);
   redirect(`/dashboard/feedback/${requestId}`);
 }
 
-// Devuelven el resultado en vez de redirigir: el asistente de onboarding
-// (Onboarding360Wizard) necesita quedarse en el paso de selección para
-// mostrar el error, o pasar al paso de confirmación tras el éxito, sin que
-// una redirección de servidor le arrebate el control de en qué pantalla
-// está el usuario.
-type EvaluatorActionState = { error: string } | { success: true };
-
-export async function organizeCycleEvaluators(
-  _prevState: EvaluatorActionState | null,
-  formData: FormData
-): Promise<EvaluatorActionState> {
+export async function organizeCycleEvaluators(formData: FormData) {
   const cycleId = String(formData.get("cycleId") || "");
   const evaluatorIds = formData.getAll("evaluatorId").map(String);
   const categories = evaluatorIds.map((id) => String(formData.get(`category_${id}`) || ""));
 
-  const supabase = await createClient();
-
-  const { data: requestId, error } = await supabase.rpc("organize_cycle_evaluators", {
-    p_cycle_id: cycleId,
-    p_evaluator_member_ids: evaluatorIds,
-    p_evaluator_categories: categories,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  if (requestId) {
-    await sendInvitationEmails(supabase, requestId);
+  try {
+    await cyclesManager.organizeEvaluators(
+      cycleId,
+      evaluatorIds,
+      categories as CycleParticipantCategory[]
+    );
+  } catch (e) {
+    redirect(
+      `/dashboard/cycles/${cycleId}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   revalidatePath("/dashboard");
-  return { success: true };
+  redirect("/dashboard?cycleOrganized=1");
 }
 
-export async function createIndividualCycleRequest(
-  _prevState: EvaluatorActionState | null,
-  formData: FormData
-): Promise<EvaluatorActionState> {
+export async function createIndividualCycleRequest(formData: FormData) {
   const evaluatorEmails = formData.getAll("evaluatorEmails").map(String);
   const categories = evaluatorEmails.map((email) => String(formData.get(`category_${email}`) || ""));
   const closesAt = String(formData.get("closesAt") || "");
   const name = String(formData.get("name") || "").trim();
 
-  const supabase = await createClient();
-
-  const { data: requestId, error } = await supabase.rpc("create_individual_cycle_request", {
-    p_evaluator_emails: evaluatorEmails,
-    p_evaluator_categories: categories,
-    p_closes_at: closesAt,
-    p_name: name || null,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  if (requestId) {
-    await sendInvitationEmails(supabase, requestId);
+  try {
+    await cyclesManager.createIndividualRequest(
+      evaluatorEmails,
+      categories as CycleParticipantCategory[],
+      closesAt,
+      name || null
+    );
+  } catch (e) {
+    redirect(
+      "/dashboard/feedback/nueva-360?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   revalidatePath("/dashboard");
-  return { success: true };
+  redirect("/dashboard?requestCreated=1");
 }
 
 export async function updateCycleRequestEvaluators(formData: FormData) {
@@ -136,31 +127,17 @@ export async function updateCycleRequestEvaluators(formData: FormData) {
   const evaluatorIds = formData.getAll("evaluatorId").map(String);
   const categories = evaluatorIds.map((id) => String(formData.get(`category_${id}`) || ""));
 
-  const supabase = await createClient();
-
-  const { data: newInvites, error } = await supabase.rpc("update_cycle_request_evaluators", {
-    p_request_id: requestId,
-    p_evaluator_member_ids: evaluatorIds,
-    p_evaluator_categories: categories,
-  });
-
-  if (error) {
-    redirect(
-      `/dashboard/feedback/${requestId}/gestionar?error=` + encodeURIComponent(error.message)
+  try {
+    await cyclesManager.updateRequestEvaluators(
+      requestId,
+      evaluatorIds,
+      categories as CycleParticipantCategory[]
     );
-  }
-
-  if (newInvites && newInvites.length > 0) {
-    const memberIds = newInvites.map((n: { invitee_member_id: string }) => n.invitee_member_id);
-    const { data: newMembers } = await supabase.from("members").select("id, email").in("id", memberIds);
-    const emailById = new Map((newMembers || []).map((m) => [m.id, m.email]));
-    const invitees = newInvites
-      .map((n: { invitee_member_id: string; token: string }) => ({
-        email: emailById.get(n.invitee_member_id),
-        token: n.token,
-      }))
-      .filter((i: { email?: string; token: string }): i is { email: string; token: string } => !!i.email);
-    await sendInvitationEmailsForNewInvitees(supabase, requestId, invitees);
+  } catch (e) {
+    redirect(
+      `/dashboard/feedback/${requestId}/gestionar?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   revalidatePath("/dashboard");
@@ -172,31 +149,16 @@ export async function updateIndividualCycleRequestEvaluators(formData: FormData)
   const evaluatorEmails = formData.getAll("evaluatorEmails").map(String);
   const categories = evaluatorEmails.map((email) => String(formData.get(`category_${email}`) || ""));
 
-  const supabase = await createClient();
-
-  const { data: newInvites, error } = await supabase.rpc(
-    "update_individual_cycle_request_evaluators",
-    {
-      p_request_id: requestId,
-      p_evaluator_emails: evaluatorEmails,
-      p_evaluator_categories: categories,
-    }
-  );
-
-  if (error) {
-    redirect(
-      `/dashboard/feedback/${requestId}/gestionar?error=` + encodeURIComponent(error.message)
-    );
-  }
-
-  if (newInvites && newInvites.length > 0) {
-    await sendInvitationEmailsForNewInvitees(
-      supabase,
+  try {
+    await cyclesManager.updateIndividualRequestEvaluators(
       requestId,
-      newInvites.map((n: { invitee_email: string; token: string }) => ({
-        email: n.invitee_email,
-        token: n.token,
-      }))
+      evaluatorEmails,
+      categories as CycleParticipantCategory[]
+    );
+  } catch (e) {
+    redirect(
+      `/dashboard/feedback/${requestId}/gestionar?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
     );
   }
 

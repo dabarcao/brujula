@@ -1,25 +1,15 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { inviteMember, createDepartment } from "@/app/actions/members";
-
-type MemberRow = {
-  id: string;
-  email: string;
-  full_name: string | null;
-  status: string;
-  is_supervisor: boolean;
-  is_guest: boolean;
-  department_id: string;
-  invite_token: string;
-  created_at: string;
-};
-
-type DepartmentRow = {
-  id: string;
-  name: string;
-};
+import { getCurrentUser } from "@/server/managers/authManager";
+import * as membersManager from "@/server/managers/membersManager";
+import Card from "@/components/ui/Card";
+import AggregateBadge from "@/components/ui/AggregateBadge";
+import ButtonPrimary from "@/components/ui/ButtonPrimary";
+import ButtonSecondary from "@/components/ui/ButtonSecondary";
+import ErrorBanner from "@/components/ui/ErrorBanner";
+import PermissionDenied from "@/components/ui/PermissionDenied";
 
 export default async function MembersPage({
   searchParams,
@@ -27,52 +17,38 @@ export default async function MembersPage({
   searchParams: Promise<{ error?: string; invited?: string; invitedEmail?: string }>;
 }) {
   const { error, invited, invitedEmail } = await searchParams;
-  const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     redirect("/login");
   }
 
-  const { data: currentMember } = await supabase
-    .from("members")
-    .select("id, is_supervisor, organization_id")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
+  const currentMember = await membersManager.getCurrentMember();
 
   if (!currentMember) {
     redirect("/dashboard");
   }
 
-  if (!currentMember.is_supervisor) {
-    return (
-      <main className="flex-1 flex items-center justify-center p-8">
-        <div className="max-w-md text-center">
-          <p className="mb-4">Solo un administrador puede gestionar los empleados.</p>
-          <Link href="/dashboard" className="underline text-sm">
-            Volver
-          </Link>
-        </div>
-      </main>
-    );
+  if (!currentMember.isSupervisor) {
+    return <PermissionDenied message="Solo un administrador puede gestionar los empleados." />;
   }
 
-  const { data: members } = await supabase
-    .from("members")
-    .select(
-      "id, email, full_name, status, is_supervisor, is_guest, department_id, invite_token, created_at"
-    )
-    .order("created_at");
+  let memberList: membersManager.MyOrganizationMemberRow[] = [];
+  try {
+    memberList = await membersManager.listMyOrganizationMembers();
+  } catch {
+    memberList = [];
+  }
 
-  const { data: departments } = await supabase
-    .from("departments")
-    .select("id, name")
-    .order("name");
+  let departmentList: membersManager.Department[] = [];
+  try {
+    departmentList = await membersManager.listDepartments();
+  } catch {
+    departmentList = [];
+  }
 
-  const departmentById = new Map((departments as DepartmentRow[] | null)?.map((d) => [d.id, d]));
+  const departmentById = new Map(departmentList.map((d) => [d.id, d]));
 
   let inviteUrl: string | null = null;
   if (invited) {
@@ -83,16 +59,16 @@ export default async function MembersPage({
   }
 
   return (
-    <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
+    <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-semibold">Empleados</h1>
-        <Link href="/dashboard" className="text-sm underline text-gray-600">
+        <Link href="/dashboard" className="text-sm underline text-ink-soft">
           Volver al panel
         </Link>
       </div>
 
       {inviteUrl && (
-        <div className="mb-6 rounded bg-blue-50 text-blue-700 text-sm p-3">
+        <div className="mb-6 rounded-brujula-md bg-indigo-wash text-ink text-sm p-3">
           <p className="mb-2">
             Invitación creada para <strong>{invitedEmail}</strong>. Comparte este link con
             esa persona para que complete su alta (todavía no enviamos emails
@@ -101,30 +77,31 @@ export default async function MembersPage({
           <input
             readOnly
             value={inviteUrl}
-            className="w-full border rounded px-2 py-1 text-xs bg-white"
+            className="w-full border border-line rounded-brujula-sm px-2 py-1 text-xs bg-paper-deep text-ink"
           />
         </div>
       )}
 
-      {error && (
-        <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
-      )}
+      {error && <ErrorBanner>{error}</ErrorBanner>}
 
-      <form action={inviteMember} className="flex flex-col gap-3 mb-4 border rounded p-4">
-        <p className="text-sm font-medium">Invitar a un nuevo empleado</p>
+      <form
+        action={inviteMember}
+        className="flex flex-col gap-3 bg-paper-deep rounded-brujula-lg shadow-card p-6 mb-4"
+      >
+        <p className="text-sm font-medium text-ink">Invitar a un nuevo empleado</p>
         <div className="flex gap-3">
           <input
             name="fullName"
             type="text"
             placeholder="Nombre (opcional)"
-            className="border rounded px-3 py-2 text-sm flex-1"
+            className="border border-line rounded-brujula-sm px-3 py-2 text-sm flex-1 bg-paper-deep text-ink"
           />
           <input
             name="email"
             type="email"
             required
             placeholder="email@empresa.com"
-            className="border rounded px-3 py-2 text-sm flex-1"
+            className="border border-line rounded-brujula-sm px-3 py-2 text-sm flex-1 bg-paper-deep text-ink"
           />
         </div>
         <div className="flex items-center gap-3">
@@ -132,28 +109,26 @@ export default async function MembersPage({
             name="departmentId"
             required
             defaultValue=""
-            className="border rounded px-3 py-2 text-sm flex-1"
+            className="border border-line rounded-brujula-sm px-3 py-2 text-sm flex-1 bg-paper-deep text-ink"
           >
             <option value="" disabled>
               Departamento
             </option>
-            {(departments as DepartmentRow[] | null)?.map((department) => (
+            {departmentList.map((department) => (
               <option key={department.id} value={department.id}>
                 {department.name}
               </option>
             ))}
           </select>
-          <button
-            type="submit"
-            className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800"
-          >
-            Invitar
-          </button>
+          <ButtonPrimary type="submit">Invitar</ButtonPrimary>
         </div>
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          <input type="checkbox" name="isGuest" />
-          Invitado — solo puede responder feedback cuando se lo pidan y ver la Biblioteca;
-          no puede pedir feedback ni tiene mapa de competencias propio.
+        <label className="flex items-start gap-2 text-sm text-ink-soft">
+          <input type="checkbox" name="isGuest" className="mt-0.5" />
+          <span>
+            Invitado — solo puede responder feedback cuando se lo pidan y ver la
+            Biblioteca; no puede pedir feedback ni tiene mapa de competencias
+            propio.
+          </span>
         </label>
       </form>
 
@@ -163,56 +138,75 @@ export default async function MembersPage({
           type="text"
           required
           placeholder="Nuevo departamento (ej. Ventas)"
-          className="border rounded px-3 py-2 text-sm flex-1"
+          className="border border-line rounded-brujula-sm px-3 py-2 text-sm flex-1 bg-paper-deep text-ink"
         />
-        <button type="submit" className="text-sm underline text-gray-700">
+        <ButtonSecondary type="submit" className="px-4 py-2 whitespace-nowrap">
           Crear departamento
-        </button>
+        </ButtonSecondary>
       </form>
 
-      <ul className="flex flex-col divide-y border rounded">
-        {(members as MemberRow[] | null)?.map((member) => (
-          <li key={member.id} className="flex items-center justify-between px-4 py-3 text-sm">
-            <div>
-              <p className="font-medium">{member.full_name || member.email}</p>
-              <p className="text-gray-500">
-                {member.email} · {departmentById.get(member.department_id)?.name || "—"}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {member.is_supervisor && (
-                <span className="text-xs rounded-full bg-gray-100 px-2 py-1">admin</span>
-              )}
-              {member.is_guest && (
-                <span className="text-xs rounded-full bg-blue-50 text-blue-700 px-2 py-1">
-                  invitado
-                </span>
-              )}
-              <span
-                className={
-                  "text-xs rounded-full px-2 py-1 " +
-                  (member.status === "active"
-                    ? "bg-green-50 text-green-700"
-                    : "bg-amber-50 text-amber-700")
-                }
-              >
-                {member.status === "active" ? "activo" : "invitado"}
-              </span>
-              {member.status === "invited" && (
-                <Link
-                  href={
-                    `/dashboard/members?invited=${encodeURIComponent(member.invite_token)}` +
-                    `&invitedEmail=${encodeURIComponent(member.email)}`
-                  }
-                  className="text-xs underline text-gray-600"
-                >
-                  Ver link
-                </Link>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+      <section>
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-sm font-medium text-ink-soft">Empleados</h2>
+          {memberList.length > 0 && (
+            <AggregateBadge className="px-3 py-1">
+              Vista agregada — {memberList.length} {memberList.length === 1 ? "empleado" : "empleados"}
+            </AggregateBadge>
+          )}
+        </div>
+
+        {memberList.length === 0 ? (
+          <Card>
+            <p className="text-sm text-ink-soft">Todavía no hay empleados.</p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {memberList.map((member) => (
+              <Card key={member.id} className="flex flex-col gap-2 overflow-hidden">
+                <div>
+                  <p className="font-medium text-ink truncate">{member.fullName || member.email}</p>
+                  <p className="text-xs text-ink-soft break-words">
+                    {member.email} · {departmentById.get(member.departmentId)?.name || "—"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {member.isSupervisor && (
+                    <span className="text-xs rounded-full bg-surface-2 text-ink-soft px-2 py-1">
+                      admin
+                    </span>
+                  )}
+                  {member.isGuest && (
+                    <span className="text-xs rounded-full bg-coral-wash text-coral-deep px-2 py-1">
+                      invitado
+                    </span>
+                  )}
+                  <span
+                    className={
+                      "text-xs rounded-full px-2 py-1 " +
+                      (member.status === "active"
+                        ? "bg-indigo-wash text-ink"
+                        : "bg-surface-2 text-ink-soft")
+                    }
+                  >
+                    {member.status === "active" ? "activo" : "invitado"}
+                  </span>
+                  {member.status === "invited" && (
+                    <Link
+                      href={
+                        `/dashboard/members?invited=${encodeURIComponent(member.inviteToken)}` +
+                        `&invitedEmail=${encodeURIComponent(member.email)}`
+                      }
+                      className="text-xs underline text-ink-soft"
+                    >
+                      Ver link
+                    </Link>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
 }

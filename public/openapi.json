@@ -1,0 +1,361 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Brújula Core API",
+    "description": "Internal HTTP surface over the `db → managers → API` layer being migrated domain by domain (Epic 3 of the backend/GUI decoupling). Every route validates a first-party app token, never a Supabase session directly.\n\n**This documents what actually exists on `main` today** — routes are added as each domain's migration lands; nothing here is aspirational.\n\n### Auth model\n1. `POST /api/auth/signin` issues `brujula_app_token`, an HttpOnly cookie — there is no bearer token to paste into Swagger's Authorize button.\n2. Every other route requires that cookie, checked by `requireApiToken()`.\n3. Every mutating route (`POST`/`PATCH`) additionally requires the `x-brujula-csrf` header (any non-empty value) — a same-site check, not a secret.\n4. Errors always come back as `{ \"error\": { \"code\": \"...\", \"message\": \"...\" } }` with a matching status: `401 unauthorized`, `403 forbidden`, `422 validation_error`, `500 internal_error`.\n\n### About \"Try it out\"\nThis page is served by the app itself at `/api-docs`, same origin as `/api/*` — so `brujula_app_token` travels automatically with every request made from here. Sign in once via `POST /api/auth/signin` below (or via the normal login page in another tab) and every other \"Try it out\" call on this page will carry your session cookie.",
+    "version": "epic-3-in-progress"
+  },
+  "servers": [
+    { "url": "/", "description": "This deployment" }
+  ],
+  "tags": [
+    { "name": "auth", "description": "Sign in/out — issues and clears the app token." },
+    { "name": "admin", "description": "Platform-admin-only: organization creation and rename." },
+    { "name": "members", "description": "Supervisor-facing: department/member management." },
+    { "name": "cycles", "description": "Company 360 cycles and individual (self-service) 360 requests." },
+    { "name": "report-groups", "description": "Peer aggregate report groups (Epic 1's proof-of-concept domain)." }
+  ],
+  "components": {
+    "securitySchemes": {
+      "appTokenCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "brujula_app_token",
+        "description": "Set by POST /api/auth/signin. HttpOnly — not readable or settable from page JS."
+      }
+    },
+    "parameters": {
+      "CsrfHeader": {
+        "name": "x-brujula-csrf",
+        "in": "header",
+        "required": true,
+        "description": "Any non-empty value. Required on every mutating request.",
+        "schema": { "type": "string", "example": "1" }
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["unauthorized", "forbidden", "validation_error", "internal_error"] },
+              "message": { "type": "string" }
+            },
+            "required": ["code", "message"]
+          }
+        },
+        "required": ["error"]
+      },
+      "OrganizationSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "supervisorEmail": { "type": "string", "nullable": true },
+          "supervisorStatus": { "type": "string", "nullable": true }
+        }
+      },
+      "OrganizationMember": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "email": { "type": "string" },
+          "fullName": { "type": "string", "nullable": true },
+          "status": { "type": "string" },
+          "isSupervisor": { "type": "boolean" },
+          "departmentName": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CycleStatusRow": {
+        "type": "object",
+        "properties": {
+          "memberId": { "type": "string", "format": "uuid" },
+          "fullName": { "type": "string", "nullable": true },
+          "email": { "type": "string" },
+          "status": { "type": "string", "enum": ["no_iniciado", "en_progreso", "completado"] }
+        }
+      },
+      "ColleagueWithClosedCycle": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "email": { "type": "string" },
+          "fullName": { "type": "string", "nullable": true }
+        }
+      },
+      "CycleParticipantCategory": {
+        "type": "string",
+        "enum": ["manager", "team", "organization", "other"],
+        "description": "How the evaluator relates to the person being evaluated."
+      },
+      "ReportGroupMember": {
+        "type": "object",
+        "properties": {
+          "memberId": { "type": "string", "format": "uuid" },
+          "fullName": { "type": "string", "nullable": true },
+          "email": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] }
+        }
+      },
+      "ReportGroupDetail": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["open", "closed"] },
+          "isCreator": { "type": "boolean" },
+          "myStatus": { "type": "string", "enum": ["pending", "accepted", "rejected"], "nullable": true },
+          "aiInterpretation": { "type": "string", "nullable": true, "description": "Populated only for the creator or an accepted member; null for a pending/rejected invitee even though the row itself is visible." },
+          "members": { "type": "array", "items": { "$ref": "#/components/schemas/ReportGroupMember" } }
+        }
+      },
+      "ReportGroupCompetencySummaryRow": {
+        "type": "object",
+        "properties": {
+          "competencyCode": { "type": "string" },
+          "competencyName": { "type": "string" },
+          "roleCode": { "type": "string", "nullable": true },
+          "roleName": { "type": "string", "nullable": true },
+          "peerAvgValue": { "type": "number", "nullable": true },
+          "selfAvgValue": { "type": "number", "nullable": true },
+          "memberCount": { "type": "integer" }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": { "description": "Missing or invalid app token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+      "Forbidden": { "description": "Missing `x-brujula-csrf` header.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+      "ValidationError": { "description": "Malformed request, or the underlying business rule rejected it — `message` is the manager/RPC's own text, unmodified.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } }
+    }
+  },
+  "security": [{ "appTokenCookie": [] }],
+  "paths": {
+    "/api/auth/signin": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Sign in",
+        "description": "The one route that does **not** require the app-token cookie (it's what issues one) — still requires the CSRF header.",
+        "security": [],
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string" }, "password": { "type": "string", "format": "password" } } } } } },
+        "responses": {
+          "200": { "description": "Signed in — sets `brujula_app_token`.", "content": { "application/json": { "schema": { "type": "object", "properties": { "appToken": { "type": "string" } } } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/api/auth/signout": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Sign out",
+        "security": [],
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "responses": {
+          "200": { "description": "Signed out — clears `brujula_app_token`." },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/admin/status": {
+      "get": {
+        "tags": ["admin"],
+        "summary": "Am I the platform admin?",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "boolean" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/admin/organizations": {
+      "get": {
+        "tags": ["admin"],
+        "summary": "List every organization",
+        "description": "Empty array for a non-platform-admin caller (RPC-internal gate, not an error).",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/OrganizationSummary" } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      },
+      "post": {
+        "tags": ["admin"],
+        "summary": "Create an organization",
+        "description": "Platform-admin only — rejected as a 422 for anyone else.",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["orgName", "adminEmail", "adminFullName"], "properties": { "orgName": { "type": "string" }, "adminEmail": { "type": "string" }, "adminFullName": { "type": "string" } } } } } },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "type": "object", "properties": { "inviteToken": { "type": "string" } } } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/api/admin/organizations/{id}": {
+      "patch": {
+        "tags": ["admin"],
+        "summary": "Rename an organization",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }, { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["newName"], "properties": { "newName": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Renamed" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/members": {
+      "get": {
+        "tags": ["members"],
+        "summary": "List an organization's members",
+        "parameters": [{ "name": "orgId", "in": "query", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/OrganizationMember" } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/members/invite": {
+      "post": {
+        "tags": ["members"],
+        "summary": "Invite a member",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["email", "fullName", "departmentId"], "properties": { "email": { "type": "string" }, "fullName": { "type": "string" }, "departmentId": { "type": "string", "format": "uuid" } } } } } },
+        "responses": { "201": { "description": "Invited", "content": { "application/json": { "schema": { "type": "object", "properties": { "inviteToken": { "type": "string" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/members/departments": {
+      "post": {
+        "tags": ["members"],
+        "summary": "Create a department",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } } } } },
+        "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "type": "object", "properties": { "departmentId": { "type": "string", "format": "uuid" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/members/accept-invite": {
+      "post": {
+        "tags": ["members"],
+        "summary": "Accept a member invite",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["token"], "properties": { "token": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Accepted", "content": { "application/json": { "schema": { "type": "object", "properties": { "organizationId": { "type": "string", "format": "uuid" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/members/claim-pending": {
+      "post": {
+        "tags": ["members"],
+        "summary": "Claim pending email invitations",
+        "description": "No-ops silently if the caller has no `members` row. Never raises.",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "responses": { "200": { "description": "Claimed (or no-op)" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/cycles": {
+      "post": {
+        "tags": ["cycles"],
+        "summary": "Create a company 360 cycle",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "opensAt", "closesAt", "participantMemberIds"], "properties": { "name": { "type": "string" }, "opensAt": { "type": "string", "format": "date" }, "closesAt": { "type": "string", "format": "date" }, "participantMemberIds": { "type": "array", "items": { "type": "string", "format": "uuid" } } } } } } },
+        "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "type": "object", "properties": { "cycleId": { "type": "string", "format": "uuid" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/cycles/{cycleId}/evaluators": {
+      "post": {
+        "tags": ["cycles"],
+        "summary": "Organize a participant's evaluators",
+        "description": "Creates that participant's 360 request within the cycle.",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }, { "name": "cycleId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["evaluatorMemberIds", "evaluatorCategories"], "properties": { "evaluatorMemberIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }, "evaluatorCategories": { "type": "array", "items": { "$ref": "#/components/schemas/CycleParticipantCategory" } } } } } } },
+        "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "type": "object", "properties": { "requestId": { "type": "string", "format": "uuid" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/cycles/{cycleId}/status": {
+      "get": {
+        "tags": ["cycles"],
+        "summary": "Per-participant status for a cycle",
+        "description": "Supervisor-only.",
+        "parameters": [{ "name": "cycleId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CycleStatusRow" } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/cycles/colleagues-closed": {
+      "get": {
+        "tags": ["cycles"],
+        "summary": "Colleagues eligible for a report group",
+        "description": "Colleagues in the caller's company with an already-closed 360 — the prerequisite pool for creating a report group.",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ColleagueWithClosedCycle" } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/cycles/requests": {
+      "post": {
+        "tags": ["cycles"],
+        "summary": "Create an individual (self-service) 360 request",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["evaluatorEmails", "evaluatorCategories", "closesAt", "name"], "properties": { "evaluatorEmails": { "type": "array", "items": { "type": "string" } }, "evaluatorCategories": { "type": "array", "items": { "$ref": "#/components/schemas/CycleParticipantCategory" } }, "closesAt": { "type": "string", "format": "date" }, "name": { "type": "string", "nullable": true } } } } } },
+        "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "type": "object", "properties": { "requestId": { "type": "string", "format": "uuid" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/cycles/requests/{requestId}/close": {
+      "post": {
+        "tags": ["cycles"],
+        "summary": "Close a cycle request",
+        "description": "Always an explicit action — never triggered automatically by date or 100% completion. Rejects below the response threshold.",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }, { "name": "requestId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Closed" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/cycles/requests/{requestId}/evaluators": {
+      "patch": {
+        "tags": ["cycles"],
+        "summary": "Update a company-cycle request's evaluators",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }, { "name": "requestId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["evaluatorMemberIds", "evaluatorCategories"], "properties": { "evaluatorMemberIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }, "evaluatorCategories": { "type": "array", "items": { "$ref": "#/components/schemas/CycleParticipantCategory" } } } } } } },
+        "responses": { "200": { "description": "Updated" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/cycles/requests/{requestId}/evaluators-by-email": {
+      "patch": {
+        "tags": ["cycles"],
+        "summary": "Update an individual request's evaluators",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }, { "name": "requestId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["evaluatorEmails", "evaluatorCategories"], "properties": { "evaluatorEmails": { "type": "array", "items": { "type": "string" } }, "evaluatorCategories": { "type": "array", "items": { "$ref": "#/components/schemas/CycleParticipantCategory" } } } } } } },
+        "responses": { "200": { "description": "Updated" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/report-groups": {
+      "post": {
+        "tags": ["report-groups"],
+        "summary": "Create a report group",
+        "description": "Every invitee must be an active teammate with at least one already-closed 360.",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "memberIds"], "properties": { "name": { "type": "string" }, "memberIds": { "type": "array", "items": { "type": "string", "format": "uuid" } } } } } } },
+        "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "type": "object", "properties": { "groupId": { "type": "string", "format": "uuid" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/report-groups/{id}": {
+      "get": {
+        "tags": ["report-groups"],
+        "summary": "Get a report group",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportGroupDetail" } } } } , "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/report-groups/{id}/respond": {
+      "post": {
+        "tags": ["report-groups"],
+        "summary": "Accept or decline an invitation",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }, { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["accept"], "properties": { "accept": { "type": "boolean" } } } } } },
+        "responses": { "200": { "description": "Recorded" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/report-groups/{id}/close": {
+      "post": {
+        "tags": ["report-groups"],
+        "summary": "Close a report group",
+        "description": "Generates the AI interpretation as part of the same call — best-effort, never fails the close itself.",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfHeader" }, { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Closed", "content": { "application/json": { "schema": { "type": "object", "properties": { "aiInterpretation": { "type": "string", "nullable": true } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/report-groups/{id}/summary": {
+      "get": {
+        "tags": ["report-groups"],
+        "summary": "Aggregate competency summary",
+        "description": "Only meaningful once the group is closed.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ReportGroupCompetencySummaryRow" } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    }
+  }
+}

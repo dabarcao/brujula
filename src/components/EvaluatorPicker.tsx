@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { buttonPrimaryClassName } from "@/components/ui/ButtonPrimary";
+import { buttonSecondaryClassName } from "@/components/ui/ButtonSecondary";
 
 type ColleagueRow = {
   id: string;
@@ -69,33 +71,33 @@ export default function EvaluatorPicker({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-xs font-medium text-gray-500 mb-2">
+        <p className="text-xs font-medium text-ink-soft mb-2">
           Ya elegidos ({selected.length})
         </p>
         {selected.length === 0 ? (
-          <p className="text-sm text-gray-400 border rounded px-4 py-3">
+          <p className="text-sm text-ink-soft border border-line rounded-brujula-sm px-4 py-3">
             Todavía no has elegido a nadie — búscalos abajo.
           </p>
         ) : (
-          <table className="w-full text-sm border rounded overflow-hidden">
-            <tbody className="divide-y">
+          <table className="w-full text-sm border border-line rounded-brujula-sm overflow-hidden">
+            <tbody className="divide-y divide-line">
               {selected.map((colleague) => {
                 const locked = !canModifyExisting && existingIds.has(colleague.id);
                 const savedCategory = categoryDefaultsById?.[colleague.id] ?? categoryDefaultValue;
                 return (
                   <tr key={colleague.id}>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-2 break-words">
                       <input type="hidden" name={checkboxName} value={colleague.id} />
-                      <span className="font-medium">{colleague.full_name || colleague.email}</span>
+                      <span className="font-medium text-ink">{colleague.full_name || colleague.email}</span>
                       {colleague.full_name && (
-                        <span className="text-gray-500"> · {colleague.email}</span>
+                        <span className="text-ink-soft"> · {colleague.email}</span>
                       )}
                     </td>
                     {categoryOptions && (
                       <td className="px-4 py-2 w-48">
                         {locked ? (
                           <>
-                            <span className="text-gray-500 text-xs">
+                            <span className="text-ink-soft text-xs">
                               {categoryOptions[savedCategory ?? ""] ?? savedCategory}
                             </span>
                             <input
@@ -108,7 +110,7 @@ export default function EvaluatorPicker({
                           <select
                             name={`category_${colleague.id}`}
                             defaultValue={savedCategory}
-                            className="border rounded px-2 py-1 text-xs w-full"
+                            className="border border-line rounded-brujula-sm px-2 py-1 text-xs w-full bg-paper-deep text-ink"
                           >
                             {Object.entries(categoryOptions).map(([value, label]) => (
                               <option key={value} value={value}>
@@ -121,12 +123,12 @@ export default function EvaluatorPicker({
                     )}
                     <td className="px-4 py-2 text-right w-20">
                       {locked ? (
-                        <span className="text-xs text-gray-300">Ya invitado</span>
+                        <span className="text-xs text-ink-soft">Ya invitado</span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => removeId(colleague.id)}
-                          className="text-xs underline text-red-700"
+                          className="text-xs underline text-ink-soft hover:text-ink"
                         >
                           Quitar
                         </button>
@@ -141,37 +143,37 @@ export default function EvaluatorPicker({
       </div>
 
       <div>
-        <p className="text-xs font-medium text-gray-500 mb-2">Añadir más</p>
+        <p className="text-xs font-medium text-ink-soft mb-2">Añadir más</p>
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar por nombre o email..."
-          className="border rounded px-3 py-2 text-sm w-full mb-2"
+          className="border border-line rounded-brujula-sm px-3 py-2 text-sm w-full mb-2 bg-paper-deep text-ink"
         />
-        <ul className="border rounded divide-y max-h-64 overflow-y-auto">
+        <ul className="border border-line rounded-brujula-sm divide-y divide-line max-h-64 overflow-y-auto">
           {filteredRest.map((colleague) => (
             <li
               key={colleague.id}
               className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
             >
-              <span>
-                <span className="font-medium">{colleague.full_name || colleague.email}</span>
+              <span className="break-words">
+                <span className="font-medium text-ink">{colleague.full_name || colleague.email}</span>
                 {colleague.full_name && (
-                  <span className="text-gray-500"> · {colleague.email}</span>
+                  <span className="text-ink-soft"> · {colleague.email}</span>
                 )}
               </span>
               <button
                 type="button"
                 onClick={() => addId(colleague.id)}
-                className="text-xs underline text-gray-700 shrink-0"
+                className="text-xs underline text-ink-soft hover:text-ink shrink-0"
               >
                 Añadir
               </button>
             </li>
           ))}
           {filteredRest.length === 0 && (
-            <li className="px-4 py-3 text-sm text-gray-500">Sin coincidencias.</li>
+            <li className="px-4 py-3 text-sm text-ink-soft">Sin coincidencias.</li>
           )}
         </ul>
       </div>
@@ -180,16 +182,12 @@ export default function EvaluatorPicker({
         <button
           type="submit"
           disabled={selected.length < minSelected}
-          className={
-            primary
-              ? "bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed"
-              : "border rounded px-4 py-2 text-sm hover:bg-gray-50 disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-          }
+          className={`${primary ? buttonPrimaryClassName : buttonSecondaryClassName} text-sm`}
         >
           {submitLabel}
         </button>
         {selected.length < minSelected && (
-          <p className="text-xs text-gray-400 mt-2">
+          <p className="text-xs text-ink-soft mt-2">
             {minSelected === 1
               ? "Elige al menos a una persona para poder enviar."
               : `Elige ${minSelected - selected.length} más para poder enviar.`}

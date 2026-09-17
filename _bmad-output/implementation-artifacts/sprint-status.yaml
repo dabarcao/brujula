@@ -1,0 +1,190 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 09-12-2026 16:34
+last_updated: 09-16-2026 14:18
+project: brujula-gui
+project_key: NOKEY
+tracking_system: file-system
+story_location:
+  /home/oski/workspace/kairosexperience/brujula-core/_bmad-output/implementation-artifacts
+development_status:
+  epic-1: in-progress
+  1-1-characterization-tests-for-report-groups-current-behavior-ba: review
+  1-2-db-access-and-manager-scaffolding-for-report-groups: review
+  1-3-enforce-the-import-boundary: review
+  1-4-app-token-issuance-and-validation: review
+  1-5-report-groups-route-handler-and-client-fetch-wrapper: review
+  1-6-report-groups-server-actions-become-thin-delegates: review
+  1-7-report-groups-feature-flag-and-rollback-safety: done
+  1-8-new-path-verification-against-the-characterization-baseline: review
+  epic-1-retrospective: optional
+
+  epic-2: in-progress
+  2-1-design-token-system: review
+  2-2-core-interactive-primitives: review
+  2-3-card-system: review
+  2-4-feedback-and-status-components: review
+  2-5-scale-slider-restyle: review
+  2-6-report-groups-screens-redesign: review
+  2-7-invitación-accept-decline-redesign: review
+  # Epic 2 complete as of this update
+  epic-2-retrospective: optional
+
+  epic-3: done
+  3-1-characterization-tests-for-admin-members-auth-current-behavi: review
+  3-2-db-access-and-manager-scaffolding-for-admin-members-auth: done
+  3-3-admin-members-route-handlers-and-client-fetch-integration: done
+  3-4-admin-members-server-actions-become-thin-delegates: done
+  3-5-admin-members-feature-flag-and-rollback-safety: done
+  3-6-admin-members-new-path-verification-against-the-characteriza: done
+  3-7-characterization-tests-for-cycles-current-behavior-baseline: done
+  3-8-db-access-and-manager-scaffolding-for-cycles: done
+  3-9-cycles-route-handlers-and-client-fetch-integration: done
+  3-10-cycles-server-actions-become-thin-delegates: done
+  3-11-cycles-feature-flag-and-rollback-safety: done
+  3-12-cycles-new-path-verification-against-the-characterization-ba: done
+  3-13-characterization-tests-for-feedback-current-behavior-baselin: done
+  3-14-db-access-and-manager-scaffolding-for-feedback: done
+  3-15-feedback-route-handlers-and-client-fetch-integration: done
+  3-16-feedback-server-actions-become-thin-delegates: done
+  3-17-feedback-feature-flag-and-rollback-safety: done
+  3-18-feedback-new-path-verification-against-the-characterization: done
+  3-19-characterization-tests-for-responder-invitation-current-beha: done
+  3-20-db-access-and-manager-scaffolding-for-responder-invitation: done
+  3-21-responder-invitation-route-handlers-and-client-fetch-integra: done
+  3-22-responder-invitation-pages-become-thin-delegates: done
+  3-23-responder-invitation-feature-flag-and-rollback-safety: done
+  3-24-responder-invitation-new-path-verification-against-the-chara: done
+  3-25-characterization-tests-for-read-only-reports-current-behavio: done
+  3-26-read-model-composition-for-read-only-reports: done
+  3-27-read-only-reports-route-handlers-and-client-fetch-integratio: done
+  3-28-read-only-reports-pages-become-thin-delegates: done
+  3-29-read-only-reports-feature-flag-and-rollback-safety: done
+  3-30-read-only-reports-new-path-verification-against-the-characte: done
+  epic-3-retrospective: optional
+
+  epic-4: done
+  4-1-admin-members-screens-redesign: done
+  4-2-cycles-screens-redesign: done
+  4-3-feedback-screens-redesign: done
+  4-4-responder-invitation-screens-redesign: done
+  4-5-read-only-reports-screens-redesign: done
+  epic-4-retrospective: optional
+
+  # User explicitly waived the AD-10 "one full production cycle / 14 days"
+  # rollback-safety gate on 2026-09-16 (no domain had actually reached it
+  # yet -- earliest migration landed days earlier) -- proceeding with
+  # legacy retirement now, at the user's own informed request.
+  epic-5: in-progress
+  # Story 5.1 split into 3 specs, each owning a disjoint file set -- two
+  # flags each had to be combined into one spec (5-1b: ADMIN_MEMBERS +
+  # REPORTS, both touching dashboard/page.tsx; 5-1c: FEEDBACK + RESPONDER,
+  # both touching actions/feedback.ts) precisely so no single file would be
+  # edited by two specs running in parallel -- see each spec's own Intent.
+  5-1a-delete-old-path-cycles: review
+  5-1b-delete-old-path-admin-reports: review
+  5-1c-delete-old-path-feedback-responder: review
+  # Satisfied via Epic 6 Stories 6.3/6.4, not a standalone pass -- see
+  # epics.md's own note on this story for why (the real gap was much
+  # larger than this story's own AC assumed).
+  5-2-confirm-the-import-boundary-holds-at-zero-violations-repo-wi: done
+  5-3-supabase-removal-and-rls-rewrite-readiness-review: backlog
+  epic-5-retrospective: optional
+
+  # Originated via bmad-correct-course (sprint-change-proposal-2026-09-16.md),
+  # not the original planning pass -- gaps found using the already-completed
+  # product, not part of the original 5-epic/53-story plan.
+  epic-6: in-progress
+  6-1-paginate-admin-organizations-list: review
+  # Superseded by Story 6.4: dashboard/members/page.tsx is now fully
+  # migrated. Only admin/page.tsx and admin/empresas/[id]/page.tsx
+  # (platform-admin/cross-org scope) remain.
+  6-2-complete-manager-delegation-for-remaining-admin-pages: backlog
+  # Shared session-resolution foundation (authManager.getCurrentUser,
+  # membersManager.getCurrentMember) -- built first, everything else in
+  # 6.4 depends on it.
+  6-3-shared-session-resolution-helpers: done
+  # Completes db -> managers -> pages layering for cycles/feedback/
+  # report-groups/members-self-reports-auth-signup, including the
+  # user-mandated 3-expert repo-wide compliance review and its
+  # remediation pass. See epics.md for full status detail.
+  6-4-complete-layering-for-cycles-feedback-groups-members-self: done
+  epic-6-retrospective: optional
+
+  # Originated via bmad-correct-course
+  # (sprint-change-proposal-2026-09-16-upstream-port.md): 8 unpulled
+  # commits found on dabarcao/brujula's origin/main (93b0e69..755c2e9),
+  # real product work built in parallel with this session's own
+  # architecture refactor. Ports it onto the now-complete db -> managers
+  # -> API/pages layering, following the mvc-layering skill.
+  epic-7: done
+  # Prerequisite for every other story in this epic -- includes a
+  # destructive (local-data-only) wipe step requiring the user's explicit
+  # in-the-moment go-ahead, not a standing pre-approval.
+  # 28 upstream migrations renumbered 0068-0095, plus a new
+  # brujula-core-owned 0096 restoring a Supervisor-exclusion guard found
+  # dropped upstream during porting (update_ad_hoc_feedback_request_evaluators).
+  # 512/512 tests, tsc/lint clean, live-verified. Commit 8332e43.
+  7-1-schema-foundation-port-28-upstream-migrations: done
+  # En-curso/cerrado split + close date live in feedbackManager
+  # (getMyFeedbackRequestsByStatus), not the page. 523/523, tsc/lint
+  # clean, live-verified. Commit 40ddcd5.
+  7-2-dashboard-en-curso-cerrado-split-report-group-task-link: done
+  # Biblioteca page, thresholds, AI interpretation in 3 parts. Closes
+  # the last eslint.config.mjs exemption (actions/cycles.ts) -- only
+  # the 2 deliberately-deferred admin pages remain exempted anywhere
+  # in the repo. 542/543 (1 known pre-existing flake). Commit b8a2904.
+  7-3-competency-model-v2-biblioteca-thresholds-ai-interpretation: done
+  # isGuest threaded through db/members.ts/membersManager.ts; every
+  # frontend chokepoint checked individually (caught one real bug --
+  # the empty-dashboard-state CTA card had no guard -- via live
+  # verification, not code review alone). 532/532 (1 known pre-existing
+  # flake). Commit bc15685.
+  7-4-members-domain-invitado-member-type: done
+  # 3-step wizard wraps the existing EvaluatorPicker/EmailEvaluatorPicker
+  # forms (Server Action mechanism preserved, page-local useActionState
+  # adapters -- flagged, actions/cycles.ts unification is a follow-up).
+  # Confirmed the self-assessment-submission bugfix holds end to end
+  # (new characterization test). 544/544 (1 known pre-existing flake).
+  # Commit aeadb32. Epic 7 complete.
+  7-5-onboarding360wizard-questionnaire-changes: done
+  # Introduces a new architectural layer (src/server/infra/*, AD-12) --
+  # see sprint-change-proposal-2026-09-16-upstream-port.md for the
+  # decision record. Commit 85539d1, plus a small follow-up (commit
+  # 5ce2cc3) closing a gap its own report flagged (the individual
+  # ad-hoc evaluators fix, blocked at the time by 7.2's file lock).
+  7-6-email-infrastructure-resend-responder-intro-finalize-ux: done
+  # Email-only-new-evaluators wired via responderManager (reuses
+  # infra/email.ts), ResponderWizard validates question-by-question.
+  # Ran concurrently with 7.3; coordinated file-scope cleanly. Commit
+  # 126ceec.
+  7-7-evaluator-email-only-new-fix-responderwizard-validation: done
+  epic-7-retrospective: optional

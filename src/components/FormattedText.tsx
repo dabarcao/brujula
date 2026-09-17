@@ -4,9 +4,14 @@
 // se interpreta como HTML. Lo que no encaje con el patrón se muestra tal
 // cual como texto plano, así una edición futura mal escrita como mucho no
 // añade el énfasis que pretendía, pero nunca puede romper la página ni
-// inyectar nada. Compartido entre Onboarding360Wizard (el asistente del
-// 360) y CompetencyModelDiagram (la Biblioteca) para no duplicar este
-// parseo en cada sitio que muestra texto editable.
+// inyectar nada.
+//
+// Bug encontrado en pruebas (2026-09-17): CompetencyModelDiagram.tsx y
+// biblioteca/page.tsx renderizaban este texto en bruto (`{texto}`), sin
+// ningún parseo -- cualquier `**negrita**` guardada en la BBDD salía
+// literal, con los asteriscos incluidos. Este componente ya existía en
+// brujula-app (el repo de origen) mucho antes de esta reingeniería; se
+// portó aquí porque se había perdido en el refactor.
 
 function parseInline(text: string) {
   return text.split(/(\*\*.+?\*\*)/g).map((segment, index) =>
@@ -18,7 +23,7 @@ function parseInline(text: string) {
   );
 }
 
-// Para texto que ya vive dentro de un <p> propio (p. ej. junto a una
+// Para texto que ya vive dentro de un elemento propio (p. ej. junto a una
 // etiqueta como "Valor alto: ") — sin partir en párrafos.
 export function FormattedInline({ text }: { text: string }) {
   return <>{parseInline(text)}</>;

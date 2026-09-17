@@ -1,68 +1,102 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import * as authManager from "@/server/managers/authManager";
+import * as membersManager from "@/server/managers/membersManager";
+import * as cyclesManager from "@/server/managers/cyclesManager";
+import Card from "@/components/ui/Card";
+import { buttonPrimaryClassName } from "@/components/ui/ButtonPrimary";
 
 export default async function CyclesListPage() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await authManager.getCurrentUser();
 
   if (!user) {
     redirect("/login");
   }
 
-  const { data: member } = await supabase
-    .from("members")
-    .select("id, is_supervisor, organization_id")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
+  const member = await membersManager.getCurrentMember();
 
-  if (!member || !member.is_supervisor) {
+  if (!member || !member.isSupervisor) {
     redirect("/dashboard");
   }
 
-  const { data: cycles } = await supabase
-    .from("feedback_cycles")
-    .select("id, name, opens_at, closes_at")
-    .eq("organization_id", member.organization_id)
-    .order("opens_at", { ascending: false });
+  const cycles = await cyclesManager.listOrganizationCycles(member.organizationId);
+
+  const openCycles = cycles.filter((cycle) => !cycle.isClosed);
+  const closedCycles = cycles.filter((cycle) => cycle.isClosed);
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">Ciclos 360</h1>
-        <Link href="/dashboard" className="text-sm underline text-gray-600">
+        <h1 className="text-2xl font-semibold text-ink">Ciclos 360</h1>
+        <Link href="/dashboard" className="text-sm underline text-ink-soft">
           Volver al panel
         </Link>
       </div>
 
       <div className="mb-6">
-        <Link
-          href="/dashboard/cycles/nueva"
-          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
-        >
+        <Link href="/dashboard/cycles/nueva" className={buttonPrimaryClassName}>
           Crear ciclo 360
         </Link>
       </div>
 
-      {!cycles || cycles.length === 0 ? (
-        <p className="text-sm text-gray-500">Todavía no has creado ningún ciclo 360.</p>
+      {cycles.length === 0 ? (
+        <Card>
+          <p className="text-sm text-ink-soft">Todavía no has creado ningún ciclo 360.</p>
+        </Card>
       ) : (
-        <ul className="border rounded divide-y">
-          {cycles.map((cycle) => (
-            <li key={cycle.id} className="px-4 py-3 text-sm">
-              <Link href={`/dashboard/cycles/${cycle.id}/estado`} className="underline">
-                Ciclo 360 {cycle.name}
-              </Link>
-              <span className="text-gray-500">
-                {" "}
-                · {cycle.opens_at} → {cycle.closes_at}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-8">
+          <div>
+            <h2 className="text-sm font-semibold text-ink mb-2">Ciclos abiertos</h2>
+            {openCycles.length === 0 ? (
+              <p className="text-sm text-ink-soft">No hay ciclos abiertos ahora mismo.</p>
+            ) : (
+              <Card className="overflow-hidden">
+                <ul className="-m-6 divide-y divide-line">
+                  {openCycles.map((cycle) => (
+                    <li key={cycle.id} className="px-6 py-3 text-sm">
+                      <Link
+                        href={`/dashboard/cycles/${cycle.id}/estado`}
+                        className="underline text-ink"
+                      >
+                        Ciclo 360 {cycle.name}
+                      </Link>
+                      <span className="text-ink-soft">
+                        {" "}
+                        · {cycle.opensAt} → {cycle.closesAt}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </div>
+
+          <div>
+            <h2 className="text-sm font-semibold text-ink mb-2">Ciclos cerrados</h2>
+            {closedCycles.length === 0 ? (
+              <p className="text-sm text-ink-soft">No hay ciclos cerrados todavía.</p>
+            ) : (
+              <Card className="overflow-hidden">
+                <ul className="-m-6 divide-y divide-line">
+                  {closedCycles.map((cycle) => (
+                    <li key={cycle.id} className="px-6 py-3 text-sm">
+                      <Link
+                        href={`/dashboard/cycles/${cycle.id}/estado`}
+                        className="underline text-ink"
+                      >
+                        Ciclo 360 {cycle.name}
+                      </Link>
+                      <span className="text-ink-soft">
+                        {" "}
+                        · {cycle.opensAt} → {cycle.closesAt}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </div>
+        </div>
       )}
     </main>
   );

@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import * as authManager from "@/server/managers/authManager";
+import * as membersManager from "@/server/managers/membersManager";
+import * as cyclesManager from "@/server/managers/cyclesManager";
+import * as feedbackManager from "@/server/managers/feedbackManager";
 import { createReportGroup } from "@/app/actions/reportGroups";
 import EvaluatorPicker from "@/components/EvaluatorPicker";
-
-type ColleagueRow = {
-  id: string;
-  email: string;
-  full_name: string | null;
-};
+import Card from "@/components/ui/Card";
+import { FormattedParagraphs } from "@/components/FormattedText";
 
 export default async function NewReportGroupPage({
   searchParams,
@@ -16,77 +15,85 @@ export default async function NewReportGroupPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await authManager.getCurrentUser();
 
   if (!user) {
     redirect("/login");
   }
 
-  const { data: currentMember } = await supabase
-    .from("members")
-    .select("id, status, organizations(kind)")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
+  const currentMember = await membersManager.getCurrentMember();
 
-  const isCompany =
-    (currentMember?.organizations as unknown as { kind: string } | null)?.kind === "company";
+  const isCompany = currentMember?.organization?.kind === "company";
 
   if (!currentMember || currentMember.status !== "active" || !isCompany) {
     redirect("/dashboard");
   }
 
-  const { data: colleagues } = await supabase.rpc("get_colleagues_with_closed_cycle");
+  const [colleagues, introText] = await Promise.all([
+    cyclesManager.getColleaguesWithClosedCycle(),
+    feedbackManager.getPlatformText(
+      "report_group_creation_intro",
+      "Elige a quién invitar. Cada uno recibirá un email avisándole de que le has invitado a este grupo, y podrá aceptar o rechazar — el informe se genera cuando todos hayan aceptado. Solo aparecen compañeros que ya tienen su propio 360 finalizado."
+    ),
+  ]);
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-semibold">Nuevo informe de grupo</h1>
-        <Link href="/dashboard" className="text-sm underline text-gray-600">
+        <Link href="/dashboard" className="text-sm underline text-ink-soft">
           Volver al panel
         </Link>
       </div>
 
-      <p className="text-sm text-gray-600 mb-6">
-        Elige a quién invitar — cada uno recibirá una tarea pendiente para
-        confirmar o rechazar antes de contar en el grupo. Solo aparecen
-        compañeros que ya tienen al menos un 360 finalizado: es lo único
-        que se agrega, no se pide nada nuevo.
-      </p>
+      <div className="text-sm text-ink-soft mb-6 flex flex-col gap-3">
+        <FormattedParagraphs text={introText} />
+      </div>
 
       {error && (
-        <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>
+        // Sin coral: DESIGN.md reserva coral para un único momento
+        // energizante por pantalla, nunca para error/warning, y no existe
+        // todavía un componente de alerta dedicado -- caja neutra
+        // border-line/text-ink en su lugar (spec-2-6, Never).
+        <p className="mb-6 rounded-brujula-md border border-line text-ink text-sm p-3">
+          {error}
+        </p>
       )}
 
-      {!colleagues || colleagues.length === 0 ? (
-        <p className="text-sm text-gray-500">
-          Todavía no hay compañeros con un 360 ya finalizado. En cuanto
-          alguien finalice el suyo, podrás invitarle aquí.
-        </p>
+      {colleagues.length === 0 ? (
+        <Card>
+          <p className="text-sm text-ink-soft">
+            Todavía no hay compañeros con un 360 ya finalizado. En cuanto
+            alguien finalice el suyo, podrás invitarle aquí.
+          </p>
+        </Card>
       ) : (
-        <form action={createReportGroup} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1 text-sm">
-            Nombre del grupo
-            <input
-              name="name"
-              type="text"
-              required
-              placeholder="Equipo de ventas"
-              className="border rounded px-3 py-2"
-            />
-          </label>
+        <Card>
+          <form action={createReportGroup} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1 text-sm text-ink">
+              Nombre del grupo
+              <input
+                name="name"
+                type="text"
+                required
+                placeholder="Equipo de ventas"
+                className="border border-line rounded-brujula-md px-3 py-2"
+              />
+            </label>
 
-          <EvaluatorPicker
-            colleagues={colleagues as ColleagueRow[]}
-            checkboxName="memberId"
-            minSelected={1}
-            submitLabel="Crear grupo"
-            primary
-          />
-        </form>
+            <EvaluatorPicker
+              colleagues={colleagues.map((c) => ({
+                id: c.id,
+                email: c.email,
+                full_name: c.fullName,
+              }))}
+              checkboxName="memberId"
+              minSelected={1}
+              submitLabel="Crear grupo"
+              primary
+            />
+          </form>
+        </Card>
       )}
     </main>
   );

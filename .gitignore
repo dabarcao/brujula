@@ -1,5 +1,14 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# clon local del repo de revisión (oscarperez-max/brujula-app-mvc), usado
+# para arrancarlo con preview_start desde dentro de este project root --
+# no es parte de este repo, nunca debe subirse aquí (ni como archivos
+# sueltos ni como git embebido)
+/mvc-review
+
+# datos locales de migración (perfiles, JSON) -- nunca deben subirse al repo
+/migrables
+
 # dependencies
 /node_modules
 /.pnp
@@ -32,19 +41,26 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Story 3.5 (_bmad-output/implementation-artifacts/
+# spec-3-5-admin-members-feature-flag-rollback-safety.md): documentation
+# only, no secrets -- explicitly opted back in via the "(can opt-in for
+# committing if needed)" note above.
+!.env.example
 
 # vercel
 .vercel
 
-# informes reales de personas identificables (perfiles TLC a migrar) —
-# nunca deben subirse al repo
-/migrables
-
-# clon local del repo reingenierizado (brujula-app-mvc), para poder
-# arrancarlo con preview_start desde dentro de este project root — no es
-# parte de este repo, nunca debe subirse aquí
-/mvc-review
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# bmad ephemeral render output (regenerated per session by render_skill.py)
+/_bmad/render/
+
+# 2026-09-17: página local de acceso rápido con cuentas de prueba (David +
+# Claude) -- botones que inician sesión directamente como Admin/Supervisor/
+# Empleado sin escribir email+contraseña cada vez. Debe quedarse SOLO en
+# esta máquina, nunca en git ni en ningún deploy -- por eso va aquí, no por
+# un flag de entorno (un flag mal puesto es un riesgo real; un archivo que
+# nunca ha entrado en git no puede llegar a producción por ningún camino).
+/src/app/dev-login/

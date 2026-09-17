@@ -4,4 +4,4 @@
 # Next.js 16 (requiere >=20.9.0). Ver conversación de configuración inicial.
 export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
 cd "$(dirname "$0")/.."
-exec npm run dev
+exec npm run dev -- -p 3100

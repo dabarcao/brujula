@@ -13,18 +13,35 @@ type ScaleLevel = {
   label: string;
 };
 
+type CompetencyDraftEntry = {
+  code: string;
+  value: number | null;
+  text: string;
+};
+
+// `defaultEntries` (spec-4-4-responder-invitation-screens-redesign.md):
+// same one-time-remount seed pattern as ScaleSlider's own `defaultValue` --
+// ResponderWizard's localStorage draft restore passes back which
+// competencies were already selected, and each one's slider value/comment,
+// via a `key` change on this component so it mounts once with the right
+// initial state and behaves exactly as before afterwards.
 export default function CompetencyPicker({
   questionId,
   competencies,
   maxSelections,
   scaleLevels,
+  defaultEntries,
 }: {
   questionId: string;
   competencies: CompetencyOption[];
   maxSelections: number;
   scaleLevels: ScaleLevel[];
+  defaultEntries?: CompetencyDraftEntry[];
 }) {
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(
+    () => defaultEntries?.map((e) => e.code) ?? []
+  );
+  const defaultEntryByCode = new Map((defaultEntries ?? []).map((e) => [e.code, e]));
 
   function toggle(code: string) {
     setSelected((prev) => {
@@ -74,15 +91,21 @@ export default function CompetencyPicker({
 
       {selected.map((code) => {
         const competency = competencies.find((c) => c.code === code);
+        const draftEntry = defaultEntryByCode.get(code);
         return (
           <div key={code} className="border rounded p-3 flex flex-col gap-2">
             <input type="hidden" name={`competency_${questionId}`} value={code} />
             <p className="text-sm font-medium">{competency?.name}</p>
-            <ScaleSlider name={`competency_value_${questionId}_${code}`} levels={scaleLevels} />
+            <ScaleSlider
+              name={`competency_value_${questionId}_${code}`}
+              levels={scaleLevels}
+              defaultValue={draftEntry?.value ?? undefined}
+            />
             <textarea
               name={`competency_text_${questionId}_${code}`}
               rows={2}
               placeholder="Comentario sobre esta competencia..."
+              defaultValue={draftEntry?.text ?? undefined}
               className="border rounded px-3 py-2 text-sm"
             />
           </div>

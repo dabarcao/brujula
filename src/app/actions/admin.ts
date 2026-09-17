@@ -1,37 +1,23 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { sendOrgAdminInviteEmail } from "@/lib/invitationEmails";
+import { createOrganization, renameOrganization } from "@/server/managers/adminManager";
 
 export async function createOrganizationAsAdmin(formData: FormData) {
   const orgName = String(formData.get("orgName") || "").trim();
   const adminEmail = String(formData.get("adminEmail") || "").trim();
   const adminFullName = String(formData.get("adminFullName") || "").trim();
 
-  const supabase = await createClient();
-
-  const { data: inviteToken, error } = await supabase.rpc("create_organization_as_admin", {
-    p_org_name: orgName,
-    p_admin_email: adminEmail,
-    p_admin_full_name: adminFullName,
-  });
-
-  if (error) {
-    redirect("/admin?error=" + encodeURIComponent(error.message));
-  }
-
-  if (inviteToken) {
-    await sendOrgAdminInviteEmail(supabase, {
-      email: adminEmail,
-      orgName,
-      inviteToken: String(inviteToken),
-    });
+  let result: { inviteToken: string };
+  try {
+    result = await createOrganization(orgName, adminEmail, adminFullName);
+  } catch (e) {
+    redirect("/admin?error=" + encodeURIComponent(e instanceof Error ? e.message : String(e)));
   }
 
   redirect(
     "/admin?created=" +
-      encodeURIComponent(String(inviteToken)) +
+      encodeURIComponent(String(result.inviteToken)) +
       "&createdEmail=" +
       encodeURIComponent(adminEmail) +
       "&createdOrg=" +
@@ -43,15 +29,13 @@ export async function updateOrganizationName(formData: FormData) {
   const orgId = String(formData.get("orgId") || "");
   const newName = String(formData.get("newName") || "").trim();
 
-  const supabase = await createClient();
-
-  const { error } = await supabase.rpc("update_organization_name", {
-    p_org_id: orgId,
-    p_new_name: newName,
-  });
-
-  if (error) {
-    redirect(`/admin/empresas/${orgId}?error=` + encodeURIComponent(error.message));
+  try {
+    await renameOrganization(orgId, newName);
+  } catch (e) {
+    redirect(
+      `/admin/empresas/${orgId}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   redirect(`/admin/empresas/${orgId}?updated=1`);

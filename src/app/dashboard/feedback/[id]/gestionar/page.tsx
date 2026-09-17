@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import * as authManager from "@/server/managers/authManager";
+import * as membersManager from "@/server/managers/membersManager";
+import * as feedbackManager from "@/server/managers/feedbackManager";
 import {
   updateCycleRequestEvaluators,
   updateIndividualCycleRequestEvaluators,
@@ -8,6 +10,7 @@ import {
 import EvaluatorPicker from "@/components/EvaluatorPicker";
 import EmailEvaluatorPicker from "@/components/EmailEvaluatorPicker";
 import { EVALUATOR_CATEGORY_LABELS } from "@/lib/evaluatorCategories";
+import ErrorBanner from "@/components/ui/ErrorBanner";
 
 type ColleagueRow = {
   id: string;
@@ -27,48 +30,24 @@ export default async function ManageCycleEvaluatorsPage({
 }) {
   const { id } = await params;
   const { error, updated } = await searchParams;
-  const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await authManager.getCurrentUser();
   if (!user) {
     redirect("/login");
   }
 
-  const { data: currentMember } = await supabase
-    .from("members")
-    .select("id, organization_id, organizations(kind)")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
+  const currentMember = await membersManager.getCurrentMember();
+  const isIndividualAccount = currentMember?.organization?.kind === "individual";
 
-  const isIndividualAccount =
-    (currentMember?.organizations as unknown as { kind: string } | null)?.kind === "individual";
+  const state = await feedbackManager.getRequestState(id);
 
-  const { data: request } = await supabase
-    .from("feedback_requests")
-    .select("id, requester_member_id, request_type, status, name, feedback_cycles(name)")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (!request || !currentMember || request.requester_member_id !== currentMember.id) {
+  if (!state || !currentMember || state.request.requesterMemberId !== currentMember.id) {
     redirect("/dashboard");
   }
 
-  if (request.request_type !== "cycle") {
+  if (state.request.requestType !== "cycle") {
     redirect(`/dashboard/feedback/${id}`);
   }
-
-  const { data: progressData } = await supabase
-    .rpc("get_feedback_request_progress", { p_request_id: id })
-    .maybeSingle();
-
-  const progress = progressData as
-    | { response_count: number; threshold: number; revealed: boolean; self_responded: boolean }
-    | null;
-
-  const totalResponseCount = (progress?.response_count ?? 0) + (progress?.self_responded ? 1 : 0);
 
   // "El usuario es el dueño de su proceso, no las condiciones" (sección
   // 4.1): un 360 ya no se cierra solo por fecha ni por 100% de
@@ -76,15 +55,13 @@ export default async function ManageCycleEvaluatorsPage({
   // seguir añadiendo evaluadores hasta que el propio solicitante decida
   // finalizarlo (informe del 360). Solo se puede modificar la categoría o
   // quitar a alguien ya invitado mientras nadie haya respondido todavía.
-  const canManageCycle = request.status === "open";
-  const canFullyEditCycle = canManageCycle && totalResponseCount === 0;
+  // canManageCycle/canFullyEditCycle vienen de feedbackManager.getRequestState
+  // -- la misma fuente de verdad (status de la solicitud + recuento de
+  // respuestas) que usa [id]/page.tsx para su propio isFinal, en vez de
+  // que cada página reinvente su propia fórmula.
+  const { request, canManageCycle, canFullyEditCycle } = state;
 
-  const { data: settings } = await supabase
-    .from("platform_settings")
-    .select("min_invitees_per_request")
-    .eq("organization_id", currentMember.organization_id)
-    .maybeSingle();
-  const minInvitees = settings?.min_invitees_per_request ?? 5;
+  const minInvitees = await feedbackManager.getMinInviteesPerRequest(currentMember.organizationId);
 
   let colleagues: ColleagueRow[] | null = null;
   let currentInviteeIds: string[] = [];
@@ -93,65 +70,44 @@ export default async function ManageCycleEvaluatorsPage({
   let categoryDefaultsByEmail: Record<string, string> = {};
 
   if (isIndividualAccount) {
-    const { data: invitations } = await supabase
-      .from("feedback_invitations")
-      .select("invitee_email, evaluator_category")
-      .eq("feedback_request_id", id)
-      .not("invitee_email", "is", null);
-    currentInviteeEmails = (invitations || [])
-      .map((i) => i.invitee_email)
-      .filter((v): v is string => Boolean(v));
+    const invitations = await feedbackManager.getFeedbackRequestEmailInvitations(id);
+    currentInviteeEmails = invitations.map((i) => i.email);
     categoryDefaultsByEmail = Object.fromEntries(
-      (invitations || [])
-        .filter((i) => i.invitee_email && i.evaluator_category)
-        .map((i) => [i.invitee_email as string, i.evaluator_category as string])
+      invitations.filter((i) => i.evaluatorCategory).map((i) => [i.email, i.evaluatorCategory as string])
     );
   } else {
-    const { data: colleaguesData } = await supabase
-      .from("members")
-      .select("id, email, full_name")
-      .eq("status", "active")
-      .eq("is_supervisor", false)
-      .neq("id", currentMember.id)
-      .order("email");
-    colleagues = colleaguesData;
+    const colleaguesRaw = await feedbackManager.getEvaluatorCandidates(currentMember.id);
+    colleagues = colleaguesRaw.map((c) => ({ id: c.id, email: c.email, full_name: c.fullName }));
 
-    const { data: invitations } = await supabase
-      .from("feedback_invitations")
-      .select("invitee_member_id, evaluator_category")
-      .eq("feedback_request_id", id)
-      .or("evaluator_category.is.null,evaluator_category.neq.self");
-    currentInviteeIds = (invitations || [])
-      .map((i) => i.invitee_member_id)
-      .filter((v): v is string => Boolean(v));
+    const invitations = await feedbackManager.getFeedbackRequestMemberInvitations(id);
+    currentInviteeIds = invitations.map((i) => i.memberId);
     categoryDefaultsById = Object.fromEntries(
-      (invitations || [])
-        .filter((i) => i.invitee_member_id && i.evaluator_category)
-        .map((i) => [i.invitee_member_id as string, i.evaluator_category as string])
+      invitations.filter((i) => i.evaluatorCategory).map((i) => [i.memberId, i.evaluatorCategory as string])
     );
   }
 
-  const cycleName = (request.feedback_cycles as unknown as { name: string } | null)?.name;
-  const requestName = cycleName || request.name;
+  const requestName = request.cycleName || request.name;
 
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-1">
-        <h1 className="text-2xl font-semibold">Gestionar evaluadores</h1>
-        <Link href="/dashboard" className="text-sm underline text-gray-600">
+        <h1 className="text-2xl font-semibold text-ink">Gestionar evaluadores</h1>
+        <Link href="/dashboard" className="text-sm underline text-ink-soft">
           Volver al panel
         </Link>
       </div>
-      <p className="text-sm text-gray-500 mb-7">{requestName || " "}</p>
+      <p className="text-sm text-ink-soft mb-7">{requestName || " "}</p>
 
-      {error && <p className="mb-6 rounded bg-red-50 text-red-700 text-sm p-3">{error}</p>}
+      {error && <ErrorBanner>{error}</ErrorBanner>}
       {updated && !error && (
-        <p className="mb-6 rounded bg-green-50 text-green-700 text-sm p-3">Cambios guardados.</p>
+        <p className="mb-6 rounded-brujula-md bg-indigo-wash text-ink text-sm p-3">
+          Cambios guardados.
+        </p>
       )}
 
       {canManageCycle ? (
         <>
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-ink-soft mb-4">
             {canFullyEditCycle
               ? "Todavía nadie ha respondido, así que puedes cambiar a quién elegiste como evaluador o su categoría. Tu autoevaluación no se ve afectada."
               : "Ya hay respuestas, así que quien ya estaba invitado no se puede quitar ni cambiar de categoría — pero puedes seguir añadiendo más evaluadores mientras el proceso siga abierto."}
@@ -168,6 +124,7 @@ export default async function ManageCycleEvaluatorsPage({
                 categoryDefaultsByEmail={categoryDefaultsByEmail}
                 canModifyExisting={canFullyEditCycle}
                 submitLabel="Guardar cambios"
+                primary
               />
             </form>
           ) : (
@@ -183,12 +140,13 @@ export default async function ManageCycleEvaluatorsPage({
                 minSelected={minInvitees}
                 canModifyExisting={canFullyEditCycle}
                 submitLabel="Guardar cambios"
+                primary
               />
             </form>
           )}
         </>
       ) : (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-ink-soft">
           El proceso ya ha terminado, así que no se puede cambiar nada más.
         </p>
       )}

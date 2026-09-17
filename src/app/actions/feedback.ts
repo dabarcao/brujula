@@ -2,34 +2,34 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import {
-  sendInvitationEmails,
-  sendInvitationEmailsForNewInvitees,
-  sendThankYouEmail,
-} from "@/lib/invitationEmails";
-import { generateAdHocInterpretation } from "@/lib/aiInterpretation";
+import * as authManager from "@/server/managers/authManager";
+import * as feedbackManager from "@/server/managers/feedbackManager";
+import type { FeedbackSubtype } from "@/server/managers/feedbackManager";
+import * as responderManager from "@/server/managers/responderManager";
 
 export async function createFeedbackRequest(formData: FormData) {
   const inviteeIds = formData.getAll("inviteeIds").map(String);
   const subtype = String(formData.get("subtype") || "general");
   const name = String(formData.get("name") || "").trim();
 
-  const supabase = await createClient();
-
-  const { data: requestId, error } = await supabase.rpc("create_ad_hoc_feedback_request", {
-    p_invitee_member_ids: inviteeIds,
-    p_subtype: subtype,
-    p_name: name || null,
-  });
-
-  if (error) {
-    redirect("/dashboard/feedback/nueva?error=" + encodeURIComponent(error.message));
+  let requestId: string;
+  try {
+    ({ requestId } = await feedbackManager.createRequest(inviteeIds, subtype as FeedbackSubtype, name || null));
+  } catch (e) {
+    redirect(
+      "/dashboard/feedback/nueva?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
-  if (requestId) {
-    await sendInvitationEmails(supabase, requestId);
-  }
+  // Story 7.6: triggered here rather than inside `feedbackManager.createRequest`
+  // itself (the more correct home per AD-3 -- see cyclesManager.ts's
+  // equivalent calls, made from inside the manager) because feedbackManager.ts
+  // is owned by a parallel story landing at the same time as this one; this
+  // still only calls managers (feedbackManager, then responderManager), no
+  // business logic in the action itself. `responderManager.sendInvitationEmails`
+  // never throws -- see its own doc comment.
+  await responderManager.sendInvitationEmails(requestId);
 
   revalidatePath("/dashboard");
   redirect("/dashboard?requestCreated=1");
@@ -40,24 +40,22 @@ export async function createFeedbackRequestForIndividual(formData: FormData) {
   const subtype = String(formData.get("subtype") || "general");
   const name = String(formData.get("name") || "").trim();
 
-  const supabase = await createClient();
-
-  const { data: requestId, error } = await supabase.rpc(
-    "create_ad_hoc_feedback_request_for_individual",
-    {
-      p_invitee_emails: inviteeEmails,
-      p_subtype: subtype,
-      p_name: name || null,
-    }
-  );
-
-  if (error) {
-    redirect("/dashboard/feedback/nueva?error=" + encodeURIComponent(error.message));
+  let requestId: string;
+  try {
+    ({ requestId } = await feedbackManager.createIndividualRequest(
+      inviteeEmails,
+      subtype as FeedbackSubtype,
+      name || null
+    ));
+  } catch (e) {
+    redirect(
+      "/dashboard/feedback/nueva?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
-  if (requestId) {
-    await sendInvitationEmails(supabase, requestId);
-  }
+  // See createFeedbackRequest's own comment just above.
+  await responderManager.sendInvitationEmails(requestId);
 
   revalidatePath("/dashboard");
   redirect("/dashboard?requestCreated=1");
@@ -66,14 +64,13 @@ export async function createFeedbackRequestForIndividual(formData: FormData) {
 export async function cancelFeedbackRequest(formData: FormData) {
   const requestId = String(formData.get("requestId") || "");
 
-  const supabase = await createClient();
-
-  const { error } = await supabase.rpc("cancel_ad_hoc_feedback_request", {
-    p_request_id: requestId,
-  });
-
-  if (error) {
-    redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
+  try {
+    await feedbackManager.cancelRequest(requestId);
+  } catch (e) {
+    redirect(
+      `/dashboard/feedback/${requestId}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   revalidatePath("/dashboard");
@@ -83,23 +80,13 @@ export async function cancelFeedbackRequest(formData: FormData) {
 export async function closeFeedbackRequest(formData: FormData) {
   const requestId = String(formData.get("requestId") || "");
 
-  const supabase = await createClient();
-
-  const { error } = await supabase.rpc("close_ad_hoc_feedback_request", {
-    p_request_id: requestId,
-  });
-
-  if (error) {
-    redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
-  }
-
-  const interpretation = await generateAdHocInterpretation(supabase, requestId);
-  if (interpretation) {
-    await supabase.rpc("save_ai_interpretation", {
-      p_request_id: requestId,
-      p_text: interpretation.resumen,
-      p_open_answers_text: interpretation.resumenAbiertas,
-    });
+  try {
+    await feedbackManager.closeRequest(requestId);
+  } catch (e) {
+    redirect(
+      `/dashboard/feedback/${requestId}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   revalidatePath("/dashboard");
@@ -110,63 +97,30 @@ export async function updateFeedbackRequestEvaluators(formData: FormData) {
   const requestId = String(formData.get("requestId") || "");
   const inviteeIds = formData.getAll("inviteeIds").map(String);
 
-  const supabase = await createClient();
-
-  const { data: newInvites, error } = await supabase.rpc(
-    "update_ad_hoc_feedback_request_evaluators",
-    {
-      p_request_id: requestId,
-      p_invitee_member_ids: inviteeIds,
-    }
-  );
-
-  if (error) {
-    redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
-  }
-
-  if (newInvites && newInvites.length > 0) {
-    const memberIds = newInvites.map((n: { invitee_member_id: string }) => n.invitee_member_id);
-    const { data: newMembers } = await supabase.from("members").select("id, email").in("id", memberIds);
-    const emailById = new Map((newMembers || []).map((m) => [m.id, m.email]));
-    const invitees = newInvites
-      .map((n: { invitee_member_id: string; token: string }) => ({
-        email: emailById.get(n.invitee_member_id),
-        token: n.token,
-      }))
-      .filter((i: { email?: string; token: string }): i is { email: string; token: string } => !!i.email);
-    await sendInvitationEmailsForNewInvitees(supabase, requestId, invitees);
+  try {
+    await feedbackManager.updateRequestEvaluators(requestId, inviteeIds);
+  } catch (e) {
+    redirect(
+      `/dashboard/feedback/${requestId}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   revalidatePath("/dashboard");
   redirect(`/dashboard/feedback/${requestId}?updated=1`);
 }
 
+/** Individual-account counterpart of updateFeedbackRequestEvaluators above (email invitees, not member ids) -- closes the Story 7.6 scope note above. */
 export async function updateFeedbackRequestEvaluatorsForIndividual(formData: FormData) {
   const requestId = String(formData.get("requestId") || "");
   const inviteeEmails = formData.getAll("inviteeEmails").map(String);
 
-  const supabase = await createClient();
-
-  const { data: newInvites, error } = await supabase.rpc(
-    "update_ad_hoc_feedback_request_evaluators_for_individual",
-    {
-      p_request_id: requestId,
-      p_invitee_emails: inviteeEmails,
-    }
-  );
-
-  if (error) {
-    redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
-  }
-
-  if (newInvites && newInvites.length > 0) {
-    await sendInvitationEmailsForNewInvitees(
-      supabase,
-      requestId,
-      newInvites.map((n: { invitee_email: string; token: string }) => ({
-        email: n.invitee_email,
-        token: n.token,
-      }))
+  try {
+    await feedbackManager.updateRequestEvaluatorsForIndividual(requestId, inviteeEmails);
+  } catch (e) {
+    redirect(
+      `/dashboard/feedback/${requestId}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : String(e))
     );
   }
 
@@ -213,32 +167,26 @@ export async function submitFeedbackResponse(formData: FormData) {
     );
   });
 
-  const supabase = await createClient();
-
-  const { data, error } = await supabase.rpc("submit_feedback_response", {
-    p_token: token,
-    p_answers: answers,
-  });
-
-  if (error) {
-    redirect(`/responder/${token}?error=` + encodeURIComponent(error.message));
-  }
-
-  // invitee_email solo viene relleno cuando quien respondió no tenía
-  // cuenta (submit_feedback_response decide esa regla, no aquí) — en ese
-  // caso, y solo en ese, se le manda el agradecimiento con la sugerencia
-  // de registrarse.
-  const inviteeEmail = data?.[0]?.invitee_email;
-  if (inviteeEmail) {
-    await sendThankYouEmail(supabase, inviteeEmail);
+  try {
+    await responderManager.submitResponse(
+      token,
+      answers.map((a) => ({
+        questionId: a.question_id,
+        answerText: a.answer_text,
+        answerValue: a.answer_value,
+        competencyCode: a.competency_code,
+      }))
+    );
+  } catch (e) {
+    redirect(
+      `/responder/${token}?error=` + encodeURIComponent(e instanceof Error ? e.message : String(e))
+    );
   }
 
   // Quien respondió por email (sin cuenta) no tiene panel al que volver —
   // se le manda de vuelta al mismo token, que ahora ya está usado y
   // muestra la pantalla de "gracias por tu feedback".
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await authManager.getCurrentUser();
 
   if (!user) {
     redirect(`/responder/${token}`);

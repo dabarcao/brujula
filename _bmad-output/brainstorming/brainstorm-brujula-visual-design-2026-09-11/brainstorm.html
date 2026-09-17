@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bitácora de la Brújula</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     BRÚJULA — field-journal keepsake for the visual-design brainstorm
+     Deliberate single visual world (aged chart paper / captain's log);
+     background and every color are painted explicitly so it holds
+     regardless of the host's light/dark setting. No external JS.
+     ============================================================ */
+
+  :root{
+    --paper:       #f2ead9;
+    --paper-deep:  #e8dcbe;
+    --paper-edge:  #ddccA3;
+    --ink:         #2a2420;
+    --ink-soft:    #5b5040;
+    --line:        #cdbb96;
+    --clay:        #9c4a28;
+    --clay-soft:   #c98a67;
+    --indigo:      #2f3f68;
+    --indigo-soft: #7887ac;
+    --brass:       #8a6a26;
+    --brass-bright:#b78f34;
+    --shadow:      rgba(42,36,32,0.14);
+    --serif: "Fraunces", "Iowan Old Style", "Palatino Linotype", serif;
+    --sans:  "Karla", "Segoe UI", system-ui, sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  }
+
+  *,*::before,*::after{ box-sizing:border-box; }
+
+  html{ background:var(--paper); }
+
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:16px;
+    line-height:1.6;
+    padding-inline:20px;
+    position:relative;
+    overflow-x:hidden;
+  }
+
+  /* subtle paper grain, drawn once as a tiled turbulence SVG — no image asset */
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:0;
+    opacity:0.5;
+    mix-blend-mode:multiply;
+    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="matrix" values="0 0 0 0 0.16  0 0 0 0 0.14  0 0 0 0 0.12  0 0 0 0.05 0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
+  }
+
+  .wrap{ max-width:920px; margin-inline:auto; position:relative; z-index:1; }
+
+  h1,h2,h3{ font-family:var(--serif); text-wrap:balance; margin:0; color:var(--ink); }
+  p{ margin:0; }
+  ul{ margin:0; padding:0; list-style:none; }
+
+  a{ color:var(--indigo); }
+
+  ::selection{ background:var(--clay-soft); color:#fff; }
+
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--brass);
+  }
+
+  .measure{ max-width:65ch; }
+
+  /* ---------------- Masthead / hero ---------------- */
+
+  .masthead{
+    padding-block:56px 40px;
+    text-align:center;
+    border-bottom:2px solid var(--line);
+    position:relative;
+  }
+
+  .rose{ width:220px; height:220px; margin-inline:auto; display:block; }
+  .rose .ring{ fill:none; stroke:var(--brass); stroke-width:1.4; }
+  .rose .ring--inner{ stroke:var(--line); stroke-width:1; }
+  .rose .tick{ stroke:var(--brass); stroke-linecap:round; }
+  .rose .cardinal{ font-family:var(--mono); font-size:11px; fill:var(--ink-soft); text-anchor:middle; letter-spacing:0.05em; }
+  .rose #needle{
+    transform-origin:150px 150px;
+    transform:rotate(202deg);
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .rose #needle{ animation:settle 2.6s cubic-bezier(.2,.8,.2,1) 0.2s both; }
+  }
+  @keyframes settle{
+    0%{ transform:rotate(202deg); }
+    55%{ transform:rotate(-14deg); }
+    75%{ transform:rotate(6deg); }
+    100%{ transform:rotate(0deg); }
+  }
+
+  .masthead h1{
+    margin-top:18px;
+    font-size:clamp(2.4rem, 6vw, 3.6rem);
+    font-weight:600;
+    letter-spacing:0.01em;
+  }
+  .masthead .kicker{
+    font-family:var(--serif);
+    font-style:italic;
+    font-weight:400;
+    color:var(--ink-soft);
+    font-size:1.05rem;
+    margin-top:6px;
+  }
+
+  .logstamp{
+    display:inline-flex;
+    flex-wrap:wrap;
+    gap:8px 18px;
+    justify-content:center;
+    margin-top:26px;
+    font-family:var(--mono);
+    font-size:0.72rem;
+    color:var(--ink-soft);
+    letter-spacing:0.03em;
+  }
+  .logstamp span b{ color:var(--ink); font-weight:500; }
+
+  /* ---------------- Chapter / waypoint scaffold ---------------- */
+
+  .chapter{
+    display:grid;
+    grid-template-columns:76px 1fr;
+    gap:0 24px;
+    padding-block:44px;
+    position:relative;
+  }
+  .chapter + .chapter{ border-top:1px dashed var(--line); }
+
+  .spine{ position:relative; display:flex; flex-direction:column; align-items:center; }
+  .spine::before{
+    content:"";
+    position:absolute;
+    top:0; bottom:0; left:50%;
+    border-left:2px dashed var(--brass-bright);
+    opacity:0.55;
+    transform:translateX(-50%);
+  }
+  .marker{
+    width:46px; height:46px; border-radius:50%;
+    background:var(--paper-deep);
+    border:2px solid var(--brass);
+    display:flex; align-items:center; justify-content:center;
+    position:relative; z-index:1;
+    font-family:var(--serif); font-weight:600; color:var(--brass);
+    box-shadow:0 2px 6px var(--shadow);
+  }
+  .bearing{
+    font-family:var(--mono); font-size:0.65rem; color:var(--ink-soft);
+    margin-top:8px; letter-spacing:0.04em; text-align:center; position:relative; z-index:1;
+    background:var(--paper); padding-inline:2px;
+  }
+
+  .chapter-head{ margin-bottom:22px; }
+  .chapter-head h2{ font-size:clamp(1.5rem,3.4vw,2rem); font-weight:600; }
+  .chapter-head .eyebrow{ display:block; margin-bottom:6px; }
+  .chapter-head .dek{
+    font-family:var(--serif); font-style:italic; color:var(--ink-soft);
+    margin-top:8px; font-size:1.02rem; max-width:60ch;
+  }
+
+  ul.ideas{ display:flex; flex-direction:column; gap:9px; margin-top:14px; }
+  ul.ideas li{ padding-left:1.4em; position:relative; font-size:0.95rem; }
+  ul.ideas li::before{
+    content:"◆"; position:absolute; left:0; top:0.05em; font-size:0.6em;
+    color:var(--brass-bright);
+  }
+
+  /* ---------------- Chapter 1: roster of personas ---------------- */
+
+  .roster{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:18px; }
+  .persona{
+    background:var(--paper-deep);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:18px 20px 20px;
+  }
+  .persona .role{
+    font-family:var(--mono); font-size:0.66rem; text-transform:uppercase;
+    letter-spacing:0.1em; color:var(--brass);
+  }
+  .persona h3{ font-size:1.15rem; margin-top:4px; font-weight:600; }
+  .persona .who{ font-family:var(--sans); font-size:0.85rem; color:var(--ink-soft); margin-top:2px; }
+
+  /* ---------------- Chapter 2: specimen tags (trait transfer) ---------------- */
+
+  .specimens{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(250px,1fr));
+    gap:26px 20px; margin-top:6px;
+  }
+  .tag{
+    position:relative;
+    background:var(--paper-deep);
+    border:1px solid var(--brass);
+    padding:20px 18px 16px 26px;
+    clip-path:polygon(10% 0%, 100% 0%, 100% 100%, 10% 100%, 0% 50%);
+    box-shadow:1px 2px 5px var(--shadow);
+  }
+  .tag:nth-child(3n){ transform:rotate(-0.6deg); }
+  .tag:nth-child(3n+1){ transform:rotate(0.8deg); }
+  .tag .hole{
+    position:absolute; left:12px; top:50%; transform:translateY(-50%);
+    width:12px; height:12px; border-radius:50%;
+    background:var(--paper); border:1.5px solid var(--brass);
+  }
+  .tag .from{
+    font-family:var(--mono); font-size:0.65rem; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--ink-soft);
+  }
+  .tag .name{ font-family:var(--serif); font-weight:600; font-size:1.15rem; color:var(--clay); margin-top:2px; }
+  .tag .arrow{ font-family:var(--mono); font-size:0.7rem; color:var(--brass-bright); margin:8px 0 6px; display:block; }
+  .tag .onto{ font-weight:600; }
+  .tag p.note{ font-size:0.88rem; margin-top:6px; color:var(--ink); }
+
+  /* ---------------- Chapter 3: empathy — open journal spread ---------------- */
+
+  .spread{
+    display:grid; grid-template-columns:1fr 1fr; gap:0;
+    background:var(--paper-deep);
+    border:1px solid var(--line);
+    border-radius:8px;
+    overflow:hidden;
+    box-shadow:0 4px 14px var(--shadow);
+  }
+  .spread .page{ padding:22px 24px; position:relative; }
+  .spread .page + .page{ border-left:1px dashed var(--brass-bright); }
+  .spread .page h3{ font-size:1.05rem; font-weight:600; }
+  .spread .page .subject{ font-family:var(--serif); font-style:italic; color:var(--ink-soft); font-size:0.92rem; margin-top:2px; }
+  .quad{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
+  .quad .cell{ background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:10px 12px; }
+  .quad .cell .lbl{ font-family:var(--mono); font-size:0.6rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--brass); display:block; margin-bottom:4px; }
+  .quad .cell p{ font-size:0.85rem; }
+  .spread .followed{ margin-top:16px; }
+  .spread .followed .lbl{ font-family:var(--mono); font-size:0.62rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-soft); }
+  .spread .followed ul{ margin-top:8px; display:flex; flex-direction:column; gap:7px; }
+  .spread .followed li{ padding-left:1.3em; position:relative; font-size:0.86rem; }
+  .spread .followed li::before{ content:"◆"; position:absolute; left:0; top:0.1em; font-size:0.55em; color:var(--brass-bright); }
+
+  @media (max-width:640px){
+    .spread{ grid-template-columns:1fr; }
+    .spread .page + .page{ border-left:none; border-top:1px dashed var(--brass-bright); }
+  }
+
+  /* ---------------- Chapter 4: affinity clusters ---------------- */
+
+  .clusters{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:16px; margin-top:6px; }
+  .cluster{
+    background:var(--paper-deep); border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px;
+  }
+  .cluster .num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:26px; height:26px; border-radius:50%; border:1.5px solid var(--brass);
+    font-family:var(--mono); font-size:0.7rem; color:var(--brass); margin-bottom:8px;
+  }
+  .cluster h3{ font-size:1rem; font-weight:600; }
+  .cluster p{ font-size:0.86rem; color:var(--ink-soft); margin-top:6px; }
+
+  .cluster.locked{
+    grid-column:1 / -1;
+    background:linear-gradient(135deg, var(--paper-deep), var(--paper-edge));
+    border:2px solid var(--brass);
+    display:grid; grid-template-columns:auto 1fr; gap:14px 18px; align-items:start;
+  }
+  .cluster.locked .padlock{ font-size:1.7rem; grid-row:1/3; align-self:center; }
+  .cluster.locked .ribbon{
+    font-family:var(--mono); font-size:0.62rem; letter-spacing:0.1em; text-transform:uppercase;
+    color:#fff; background:var(--brass); padding:3px 9px; border-radius:3px; display:inline-block;
+  }
+  .cluster.locked h3{ margin-top:8px; font-size:1.1rem; }
+  .cluster.locked p{ color:var(--ink); }
+
+  /* ---------------- Climax: the fork ---------------- */
+
+  .fork-diagram{ width:100%; max-width:640px; margin:0 auto 8px; display:block; }
+  .fork-diagram text{ font-family:var(--mono); font-size:11px; fill:var(--ink-soft); }
+  .fork-diagram .harbor-lbl{ font-family:var(--mono); font-size:11px; fill:var(--ink-soft); text-anchor:middle; }
+  .fork-diagram .dest-lbl{ font-family:var(--serif); font-weight:600; font-size:15px; text-anchor:middle; }
+
+  .directions{ display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:8px; }
+  @media (max-width:640px){ .directions{ grid-template-columns:1fr; } }
+
+  .direction{ border-radius:10px; padding:26px 24px 24px; position:relative; }
+
+  .direction--quiet{
+    background:var(--paper);
+    border:1px solid var(--line);
+  }
+  .direction--quiet h3{ font-family:var(--serif); font-weight:400; font-style:italic; color:var(--clay); font-size:1.5rem; }
+  .direction--quiet .bar{ width:36px; height:2px; background:var(--clay); margin-block:10px 14px; }
+  .direction--quiet p, .direction--quiet li{ color:var(--ink); }
+  .direction--quiet ul{ display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+  .direction--quiet li{ font-size:0.9rem; padding-left:1.2em; position:relative; }
+  .direction--quiet li::before{ content:"·"; position:absolute; left:0; color:var(--clay); font-size:1.4em; line-height:0.6; }
+
+  .direction--confident{
+    background:var(--indigo);
+    color:#f2ede0;
+    box-shadow:0 8px 24px var(--shadow);
+  }
+  .direction--confident h3{ font-family:var(--sans); font-weight:700; color:#fff; font-size:1.5rem; text-transform:uppercase; letter-spacing:0.02em; }
+  .direction--confident .bar{ width:36px; height:4px; background:var(--brass-bright); margin-block:10px 14px; }
+  .direction--confident p, .direction--confident li{ color:#e7e0cf; }
+  .direction--confident ul{ display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+  .direction--confident li{ font-size:0.9rem; padding-left:1.2em; position:relative; font-weight:500; }
+  .direction--confident li::before{ content:"▲"; position:absolute; left:0; top:0.15em; font-size:0.55em; color:var(--brass-bright); }
+
+  .direction .register{ font-family:var(--mono); font-size:0.64rem; letter-spacing:0.09em; text-transform:uppercase; opacity:0.75; }
+
+  .keel{
+    margin-top:18px; display:flex; align-items:center; gap:14px;
+    background:var(--paper-deep); border:1px dashed var(--brass); border-radius:8px;
+    padding:14px 18px; font-size:0.88rem;
+  }
+  .keel .glyph{ font-size:1.3rem; flex:none; }
+
+  /* ---------------- Closing log entry ---------------- */
+
+  .closing{
+    text-align:center; padding-block:56px 64px; border-top:2px solid var(--line); margin-top:12px;
+  }
+  .seal{
+    width:64px; height:64px; margin-inline:auto 0; display:block;
+  }
+  .closing blockquote{
+    font-family:var(--serif); font-style:italic; font-weight:400;
+    font-size:clamp(1.15rem,2.6vw,1.5rem); line-height:1.55;
+    max-width:62ch; margin:20px auto 0; color:var(--ink);
+  }
+  .closing .signoff{
+    margin-top:22px; font-family:var(--mono); font-size:0.7rem; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--ink-soft);
+  }
+
+  @media (max-width:560px){
+    .chapter{ grid-template-columns:52px 1fr; gap:0 14px; }
+    .marker{ width:36px; height:36px; font-size:0.85rem; }
+    .bearing{ font-size:0.58rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ MASTHEAD ============ -->
+  <header class="masthead">
+    <svg class="rose" viewBox="0 0 300 300" role="img" aria-label="Rosa de los vientos, aguja en reposo">
+      <circle class="ring" cx="150" cy="150" r="138"/>
+      <circle class="ring ring--inner" cx="150" cy="150" r="112"/>
+      <g id="ticks"></g>
+      <text class="cardinal" x="150" y="30">N</text>
+      <text class="cardinal" x="270" y="155">E</text>
+      <text class="cardinal" x="150" y="280">S</text>
+      <text class="cardinal" x="30" y="155">O</text>
+      <g id="needle">
+        <polygon points="150,42 160,150 150,150" fill="var(--clay)"/>
+        <polygon points="150,42 140,150 150,150" fill="var(--clay-soft)"/>
+        <polygon points="150,258 160,150 150,150" fill="var(--indigo)"/>
+        <polygon points="150,258 140,150 150,150" fill="var(--indigo-soft)"/>
+        <circle cx="150" cy="150" r="7" fill="var(--brass)"/>
+      </g>
+    </svg>
+    <h1>Brújula</h1>
+    <p class="kicker">Bitácora de una tormenta de ideas — hallar el rumbo visual</p>
+    <div class="logstamp">
+      <span>Tema: <b>dirección visual de Brújula</b>, app anónima de feedback de pares y coaching</span>
+      <span>Modo: <b>autónomo</b></span>
+      <span>Estado: <b>completa</b></span>
+      <span>Cerrada: <b>11 sep 2026, 16:46</b></span>
+    </div>
+  </header>
+
+  <!-- ============ CHAPTER 1 — ROLE PLAYING ============ -->
+  <section class="chapter">
+    <div class="spine"><div class="marker">1</div><div class="bearing">RUMBO<br>000°</div></div>
+    <div>
+      <div class="chapter-head">
+        <span class="eyebrow">Técnica primera · Juego de roles</span>
+        <h2>La tripulación embarca</h2>
+        <p class="dek">Tres oficios del diseño y dos voces de quienes de verdad usarán Brújula, cada uno anotando lo que ve desde su puesto de guardia.</p>
+      </div>
+
+      <div class="roster">
+        <article class="persona">
+          <span class="role">Diseño visual / UI senior</span>
+          <h3>Maya</h3>
+          <ul class="ideas">
+            <li>Base cálida neutra (greige o papel, nunca blanco puro) para que el feedback anónimo se sienta humano, no clínico</li>
+            <li>Un único color de acento reservado SOLO para "tú" vs. "los demás" en los gráficos — nunca decorativo — así se lee como señal con significado</li>
+            <li>Radios suaves de 8–12px y bordes de 1px en vez de sombras pesadas: calma, no corporativo</li>
+            <li>Serif suave o humanist-sans para títulos y nombres de competencias, junto a una grotesk limpia para el chrome de la interfaz: distingue reflexión de herramienta</li>
+            <li>Radar con relleno de gradiente suave por sector de rol VACC, con zonas translúcidas donde autopercepción y pares difieren</li>
+            <li>La revelación del informe se dibuja eje por eje, dando peso a un resultado que costó valor pedir</li>
+          </ul>
+        </article>
+
+        <article class="persona">
+          <span class="role">Investigación UX en RR.HH.</span>
+          <h3>Priya</h3>
+          <ul class="ideas">
+            <li>Micro-copy + ícono de garantía de anonimato anclado junto a cada campo de feedback, no solo un aviso único</li>
+            <li>Indicador de progreso sereno, estilo admisión clínica, en vez de onboarding gamificado — el contenido trata de colegas reales</li>
+            <li>Las vistas agregadas de RR.HH./supervisor llevan un chrome visualmente distinto (patrón o insignia sutil) para que un admin nunca confunda el agregado con el detalle individual</li>
+            <li>El estado vacío de "aún no hay respuestas suficientes" se lee como progreso tranquilizador, no como fallo — evitar rojo o gris de error</li>
+            <li>Iconografía consistente para los 5 saboteadores y los 4 roles VACC, repetida en todas partes para reconocimiento de patrones</li>
+            <li>Diseño mobile-first para /responder/[token], porque la mayoría de evaluadores invitados abren el enlace desde el correo en el teléfono</li>
+          </ul>
+        </article>
+
+        <article class="persona">
+          <span class="role">Estrategia de marca y tono</span>
+          <h3>Theo</h3>
+          <ul class="ideas">
+            <li>La voz de marca es una brújula, no un boletín de notas — motivo sutil de rosa de los vientos en estados vacíos, cargas y progreso del wizard</li>
+            <li>Evitar la codificación semáforo rojo/verde para puntuaciones — demasiado punitiva para una herramienta de crecimiento — usar una escala de intensidad de un solo tono</li>
+            <li>La sección de narrativa de IA recibe un registro visual silencioso (tarjeta suave, borde tenue, etiqueta de "reflexión") que distingue la lectura generada del dato crudo y confiable</li>
+            <li>La sección de saboteadores lleva un tono deliberadamente más gentil que las puntuaciones de competencia: color más suave, más aire, menos aspecto de gráfico</li>
+          </ul>
+        </article>
+
+        <article class="persona">
+          <span class="role">Quien da el feedback (evaluador anónimo)</span>
+          <h3>La persona evaluadora</h3>
+          <ul class="ideas">
+            <li>El wizard reconfirma visualmente que tu nombre nunca queda asociado, justo en el momento de enviar la pregunta más sensible</li>
+            <li>La pantalla de una pregunta a la vez usa una barra de progreso suave en lugar de un contador visible ("12 de 30") para que no se sienta como un trámite</li>
+            <li>Affordance de salida / guardar-y-volver claramente visible, porque suele hacerse esto entre reuniones</li>
+          </ul>
+        </article>
+
+        <article class="persona">
+          <span class="role">Quien recibe el feedback</span>
+          <h3>La persona evaluada</h3>
+          <ul class="ideas">
+            <li>El informe se abre encabezando con una fortaleza antes que las áreas de mejora — el orden es una decisión de diseño tanto como el color</li>
+            <li>La brecha entre autopercepción y pares se visualiza como una línea punteada etiquetada "punto ciego / fortaleza oculta", nunca como una marca de fallo</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CHAPTER 2 — TRAIT TRANSFER ============ -->
+  <section class="chapter">
+    <div class="spine"><div class="marker">2</div><div class="bearing">RUMBO<br>060°</div></div>
+    <div>
+      <div class="chapter-head">
+        <span class="eyebrow">Técnica segunda · Trasplante de rasgos</span>
+        <h2>Especímenes recogidos en otras costas</h2>
+        <p class="dek">De cada puerto visitado — herramientas de RR.HH., coaching y dominios vecinos — se recorta un rasgo y se injerta en un punto preciso de Brújula.</p>
+      </div>
+
+      <div class="specimens">
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Recogido en</span><span class="name">Lattice</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> la home del panel</span>
+          <p class="note">Pulido de consumo y tarjetas con bloques de color seguro, para que los ciclos abiertos se sientan momentos, no filas de tabla.</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Recogido en</span><span class="name">Culture Amp</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> los estados vacíos</span>
+          <p class="note">Ilustración suave que humaniza las pantallas cargadas de datos: "sin respuestas aún", "sin ciclo abierto".</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Recogido en</span><span class="name">15Five</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> "Pedir feedback"</span>
+          <p class="note">Encuadre de feedback continuo como hábito, para que la entrada ad hoc se sienta ligera, no un gran evento formal.</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Recogido en</span><span class="name">BetterUp</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> la narrativa de IA</span>
+          <p class="note">Tono de coaching sereno y aspiracional vía aire generoso y color contenido en las secciones de interpretación.</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Recogido en</span><span class="name">Officevibe</span>
+          <span class="arrow">↳ <span class="onto">injertado con cautela en</span> invitaciones de bajo riesgo</span>
+          <p class="note">Toques juguetones para nudges de participación — jamás en el flujo de respuesta anónima.</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Recogido en</span><span class="name">Leapsome</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> /admin e informe-empresa</span>
+          <p class="note">Densidad de información limpia de nivel empresa, donde RR.HH. escanea mucho de una vez.</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Costa vecina — Headspace / Calm</span><span class="name">Respiro</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> saboteadores y pre-envío sensible</span>
+          <p class="note">Degradados suaves y espacio para respirar alrededor del contenido vulnerable.</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Costa vecina — Duolingo</span><span class="name">Racha</span>
+          <span class="arrow">↳ <span class="onto">injertado solo en</span> transiciones del wizard</span>
+          <p class="note">Satisfacción al completar un paso (marcas, pequeña celebración) — nunca en el informe final.</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Costa vecina — Notion</span><span class="name">Página en blanco</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> mapa de competencias e informe de grupo</span>
+          <p class="note">Chrome mínimo, contenido primero, ancho de línea controlado.</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Costa vecina — Linear</span><span class="name">Precisión</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> pantallas de gestión de ciclos</span>
+          <p class="note">Microinteracciones rápidas y nítidas, movimiento contenido, para uso repetido por la misma persona de RR.HH.</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Dominio afín — Reseñas de Airbnb</span><span class="name">Confianza</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> cabeceras de informe</span>
+          <p class="note">Patrón de participación verificada y transparente, reforzando los umbrales ya definidos (mínimo 5 invitados, 3 respuestas).</p>
+        </div>
+        <div class="tag"><span class="hole"></span>
+          <span class="from">Dominio afín — GitHub</span><span class="name">Constancia</span>
+          <span class="arrow">↳ <span class="onto">injertado en</span> "Mi mapa"</span>
+          <p class="note">Visual persistente y pequeño de participación en el tiempo, mostrando tendencia a través de 360s cerrados, no solo la última foto.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CHAPTER 3 — EMPATHY MAP ============ -->
+  <section class="chapter">
+    <div class="spine"><div class="marker">3</div><div class="bearing">RUMBO<br>120°</div></div>
+    <div>
+      <div class="chapter-head">
+        <span class="eyebrow">Técnica tercera · Mapa de empatía</span>
+        <h2>Dos páginas abiertas del mismo diario</h2>
+        <p class="dek">El instante más vulnerable visto desde ambos lados: quien abre su informe, y quien está a mitad del wizard escribiendo sobre un colega.</p>
+      </div>
+
+      <div class="spread">
+        <div class="page">
+          <h3>Quien recibe</h3>
+          <p class="subject">abriendo el informe por primera vez</p>
+          <div class="quad">
+            <div class="cell"><span class="lbl">Dice</span><p>"Espero que esto no sea brutal." / "¿De verdad contestó suficiente gente?"</p></div>
+            <div class="cell"><span class="lbl">Piensa</span><p>Compararse con pares desconocidos genera ansiedad, incluso siendo anónimo.</p></div>
+            <div class="cell"><span class="lbl">Hace</span><p>Lo abre en privado. Quizá le hace captura de pantalla.</p></div>
+            <div class="cell"><span class="lbl">Siente</span><p>Vulnerable. Esperanzada. A la defensiva.</p></div>
+          </div>
+          <div class="followed">
+            <span class="lbl">De aquí nacieron</span>
+            <ul>
+              <li>El informe abre como resumen cerrado (fortalezas titulares + un área de mejora) con un "ver detalle completo" deliberado</li>
+              <li>Nunca reproducir la animación de revelación en automático — un botón "mostrar mis resultados" para poder prepararse</li>
+              <li>Una hoja de estilos impresa/exportable distinta y más serena, para la reflexión offline o compartir con un coach</li>
+            </ul>
+          </div>
+        </div>
+        <div class="page">
+          <h3>Quien da feedback</h3>
+          <p class="subject">a mitad del wizard</p>
+          <div class="quad">
+            <div class="cell"><span class="lbl">Dice</span><p>"No quiero decir ni mucho ni poco." / "¿Esto es de verdad anónimo si solo somos 3?"</p></div>
+            <div class="cell"><span class="lbl">Piensa</span><p>Le preocupa ser identificable por su forma de escribir.</p></div>
+            <div class="cell"><span class="lbl">Hace</span><p>Puede abandonar a mitad si se siente demasiado expuesto.</p></div>
+            <div class="cell"><span class="lbl">Siente</span><p>Culpa leve. Incomodidad al dar crítica.</p></div>
+          </div>
+          <div class="followed">
+            <span class="lbl">De aquí nacieron</span>
+            <ul>
+              <li>Los campos de texto libre muestran un aviso gentil de "esto podría leerse como identificable" (heurística en cliente para frases muy cortas o singulares) — una affordance de interfaz, no un cambio de negocio</li>
+              <li>Cerca de las preguntas sensibles, reafirmar en vivo: "X personas preguntadas, respuestas agrupadas", cuando el grupo es lo bastante pequeño como para preocupar</li>
+              <li>Pausar y retomar se presenta como un marcapáginas, no como progreso perdido</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CHAPTER 4 — AFFINITY CLUSTERING ============ -->
+  <section class="chapter">
+    <div class="spine"><div class="marker">4</div><div class="bearing">RUMBO<br>180°</div></div>
+    <div>
+      <div class="chapter-head">
+        <span class="eyebrow">Convergencia · Agrupación por afinidad</span>
+        <h2>49 ideas sueltas, siete montones de piedras</h2>
+        <p class="dek">Todo lo anotado en las tres técnicas se reordena en siete pilas temáticas. Una de ellas no es un estilo — es el terreno firme bajo ambos rumbos.</p>
+      </div>
+
+      <div class="clusters">
+        <div class="cluster">
+          <span class="num">1</span>
+          <h3>Filosofía de color y tono</h3>
+          <p>Base cálida neutra, un único acento con significado, sin semáforo rojo/verde, escala de intensidad de un tono, paleta más gentil para saboteadores.</p>
+        </div>
+        <div class="cluster">
+          <span class="num">2</span>
+          <h3>Tipografía y jerarquía</h3>
+          <p>Serif humanista frente a grotesk de chrome, layout tipo Notion centrado en contenido, densidad tipo Leapsome para el panel de administración.</p>
+        </div>
+        <div class="cluster">
+          <span class="num">3</span>
+          <h3>Tratamiento de gráficos y datos</h3>
+          <p>Radar con gradiente suave, solapes translúcidos entre autopercepción y pares, línea punteada de punto ciego, tendencia tipo GitHub, conteo de participación tipo Airbnb.</p>
+        </div>
+        <div class="cluster">
+          <span class="num">4</span>
+          <h3>Movimiento y coreografía de revelado</h3>
+          <p>Dibujo eje por eje frente a "mostrar mis resultados" a demanda; microcelebración tipo Duolingo confinada a los pasos del wizard.</p>
+        </div>
+        <div class="cluster">
+          <span class="num">6</span>
+          <h3>Iconografía y motivo de marca</h3>
+          <p>Intensidad del motivo de rosa de los vientos; set de íconos consistente para saboteadores y roles VACC.</p>
+        </div>
+        <div class="cluster">
+          <span class="num">7</span>
+          <h3>Registro por dominio</h3>
+          <p>Pulido en la home del panel, densidad en administración/empresa, nivel de energía del wizard, tarjeta silenciosa para la narrativa de IA.</p>
+        </div>
+
+        <div class="cluster locked">
+          <span class="padlock">🔒</span>
+          <div>
+            <span class="ribbon">bloqueado · infraestructura compartida</span>
+            <h3>5 · Señalización de confianza y anonimato</h3>
+            <p>Micro-copy persistente de anonimato, chrome exclusivo para agregados de RR.HH., reafirmación de respuestas agrupadas, aviso de identificabilidad, marcapáginas de pausa y retomar. No es un eje de estilo: aplica idéntico a cualquier dirección visual que se elija.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLIMAX — THE FORK ============ -->
+  <section class="chapter" style="grid-template-columns:1fr;">
+    <div class="chapter-head" style="text-align:center;">
+      <span class="eyebrow">El clímax · dos rumbos desde un mismo puerto</span>
+      <h2>La bifurcación de la Brújula</h2>
+      <p class="dek" style="margin-inline:auto;">Ambos rumbos zarpan del mismo puerto de confianza y anonimato. Lo que cambia a partir de ahí es el registro emocional.</p>
+    </div>
+
+    <svg class="fork-diagram" viewBox="0 0 600 260" role="img" aria-label="Diagrama de bifurcación: del puerto de confianza compartido nacen dos rumbos, Brújula Serena y Brújula Segura">
+      <path d="M300,238 C260,150 190,80 130,26" fill="none" stroke="var(--clay)" stroke-width="3"/>
+      <path d="M300,238 C340,150 410,80 470,26" fill="none" stroke="var(--indigo)" stroke-width="3"/>
+      <circle cx="300" cy="238" r="10" fill="var(--brass)"/>
+      <text class="harbor-lbl" x="300" y="256">Puerto de confianza · compartido</text>
+      <circle cx="130" cy="26" r="7" fill="var(--clay)"/>
+      <text class="dest-lbl" x="130" y="16" fill="var(--clay)">Brújula Serena</text>
+      <text class="harbor-lbl" x="130" y="46">rumbo 315°</text>
+      <circle cx="470" cy="26" r="7" fill="var(--indigo)"/>
+      <text class="dest-lbl" x="470" y="16" fill="var(--indigo)">Brújula Segura</text>
+      <text class="harbor-lbl" x="470" y="46">rumbo 135°</text>
+    </svg>
+
+    <div class="directions">
+      <article class="direction direction--quiet">
+        <span class="register">Dirección A</span>
+        <h3>Brújula Serena</h3>
+        <div class="bar"></div>
+        <p>Registro contenido y terapéutico. Fondo neutro cálido de papel. Un único acento de terracota apagada. Aire generoso. Titulares en serif humanista. Radar con gradiente suave y baja saturación. Movimiento mínimo — se desvanece, no se dibuja. El motivo de brújula aparece escaso y abstracto.</p>
+        <ul>
+          <li>Inclinación BetterUp / Headspace / Notion</li>
+          <li>El feedback se trata como reflexión privada</li>
+        </ul>
+      </article>
+      <article class="direction direction--confident">
+        <span class="register">Dirección B</span>
+        <h3>Brújula Segura</h3>
+        <div class="bar"></div>
+        <p>Más cálida, con más marca, sin dejar de ser no punitiva. Fondo neutro cálido algo más rico. Un acento índigo o verde bosque, usado con seguridad en tarjetas y llamadas a la acción. Tarjetas en bloques de color. Rosa de los vientos más audaz como elemento gráfico recurrente. El gráfico se dibuja eje por eje. Microcelebración en el wizard, nada más.</p>
+        <ul>
+          <li>Inclinación Lattice / Culture Amp</li>
+          <li>El feedback se trata como ritual de equipo que energiza</li>
+        </ul>
+      </article>
+    </div>
+
+    <div class="keel">
+      <span class="glyph">⚓</span>
+      <p>Ambos rumbos comparten idéntico contrato de componentes y tokens (primitivas de <code>packages/ui</code>). Solo difieren los valores de los tokens, la intensidad de ilustración y movimiento, y el nivel de audacia de la iconografía.</p>
+    </div>
+  </section>
+
+  <!-- ============ CLOSING LOG ENTRY ============ -->
+  <footer class="closing">
+    <svg class="seal" viewBox="0 0 64 64" role="img" aria-label="Sello final de la bitácora">
+      <circle cx="32" cy="32" r="30" fill="none" stroke="var(--brass)" stroke-width="2"/>
+      <circle cx="32" cy="32" r="23" fill="none" stroke="var(--brass)" stroke-width="1"/>
+      <line x1="32" y1="12" x2="32" y2="52" stroke="var(--brass)" stroke-width="1.4"/>
+      <line x1="12" y1="32" x2="52" y2="32" stroke="var(--brass)" stroke-width="1.4"/>
+      <polygon points="32,18 37,32 32,46 27,32" fill="var(--clay)" opacity="0.85"/>
+    </svg>
+    <blockquote>
+      Las señales de confianza y anonimato no son una elección de estilo: son la propuesta de valor del producto hecha visible, y viajan idénticas gane el rumbo que gane. La verdadera bifurcación es el registro emocional — Serena trata el feedback como reflexión privada; Segura lo trata como un ritual de equipo que energiza. Ninguna usa semáforo rojo/verde. Ambas llevan la brújula en la sangre, a distinta intensidad, atando la identidad visual al propio nombre del producto.
+    </blockquote>
+    <p class="signoff">— fin de la bitácora · brainstorm-brujula-visual-design · 11 sep 2026 —</p>
+  </footer>
+
+</div>
+
+<script>
+  (function(){
+    var svgNS = "http://www.w3.org/2000/svg";
+    var ticks = document.getElementById("ticks");
+    if(!ticks) return;
+    var cx = 150, cy = 150, rOuter = 138;
+    for(var deg = 0; deg < 360; deg += 5){
+      var cardinal = deg % 90 === 0;
+      var major = deg % 30 === 0;
+      var rInner = cardinal ? 100 : (major ? 112 : 124);
+      var rad = (deg - 90) * Math.PI / 180;
+      var x1 = cx + rOuter * Math.cos(rad);
+      var y1 = cy + rOuter * Math.sin(rad);
+      var x2 = cx + rInner * Math.cos(rad);
+      var y2 = cy + rInner * Math.sin(rad);
+      var line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", x1.toFixed(2));
+      line.setAttribute("y1", y1.toFixed(2));
+      line.setAttribute("x2", x2.toFixed(2));
+      line.setAttribute("y2", y2.toFixed(2));
+      line.setAttribute("class", "tick");
+      line.setAttribute("stroke-width", cardinal ? "2.4" : (major ? "1.6" : "0.8"));
+      ticks.appendChild(line);
+    }
+  })();
+</script>
+</body>
+</html>

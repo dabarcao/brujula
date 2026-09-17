@@ -1,8 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { GROUP_COLORS, GROUP_LABELS, GROUP_ORDER } from "@/components/CompetencyRadar";
+import { GROUP_COLORS, GROUP_ORDER } from "@/components/CompetencyRadar";
 import { FormattedInline, FormattedParagraphs } from "@/components/FormattedText";
+
+// Story 7.3 (Biblioteca): the full competency model drawn as the same
+// 16-axis / 5-sector shape as CompetencyRadar (geometry copied, not
+// imported -- CompetencyRadar draws data series this diagram has none of),
+// but clickable and with zero hardcoded copy: every name/description on
+// screen (framework intro, role, competency, threshold) comes from the
+// `frameworks`/`roles`/`frameworkIntro`/`plenitudDescription` props, which
+// the page reads straight from membersManager's competency_* catalogs.
+// Quadrant/legend labels use each role's real DB `name` (e.g. "Visión"),
+// never the GROUP_LABELS presentation constant other report views use --
+// that constant is a shared fallback for places with no live role row to
+// read from; here we always have one.
 
 type Framework = {
   code: string;
@@ -25,11 +37,6 @@ type Selected =
   | { kind: "competency"; code: string }
   | null;
 
-// Misma geometría que CompetencyRadar (15 ejes / 5 sectores, Plenitud
-// centrada arriba) pero sin ningún dato de nadie — es el propio modelo, no
-// un informe. Clicable: la tarjeta de "marco general" (Organizaciones
-// Teal, engloba todo lo demás), un sector (Plenitud o un rol VACC), o el
-// nombre de una competencia — selecciona qué ficha se muestra debajo.
 export default function CompetencyModelDiagram({
   frameworkIntro,
   frameworks,
@@ -45,6 +52,9 @@ export default function CompetencyModelDiagram({
 }) {
   const [selected, setSelected] = useState<Selected>(null);
 
+  const roleByCode = new Map(roles.map((r) => [r.code, r]));
+  const groupLabel = (code: string) => (code === "plenitud" ? "Plenitud" : roleByCode.get(code)?.name || code);
+
   const axes = [...frameworks].sort(
     (a, b) => (GROUP_ORDER[a.groupCode] ?? 99) - (GROUP_ORDER[b.groupCode] ?? 99)
   );
@@ -57,11 +67,11 @@ export default function CompetencyModelDiagram({
 
   const center = size / 2;
   const maxRadius = center - 100;
-  const halfWidth = Math.PI / n;
+  const halfWidth = n > 0 ? Math.PI / n : 0;
 
   const firstGroupSize = axes.filter((a) => a.groupCode === axes[0]?.groupCode).length;
   const centerIndex = (firstGroupSize - 1) / 2;
-  const angleFor = (i: number) => ((Math.PI * 2) / n) * (i - centerIndex) - Math.PI / 2;
+  const angleFor = (i: number) => (n === 0 ? 0 : ((Math.PI * 2) / n) * (i - centerIndex) - Math.PI / 2);
 
   const points = axes.map((axis, i) => {
     const angle = angleFor(i);
@@ -99,21 +109,11 @@ export default function CompetencyModelDiagram({
     }
   }
 
-  const roleByCode = new Map(roles.map((r) => [r.code, r]));
-
   const selectedInfo = (() => {
-    // thresholdHigh/thresholdLow van siempre en el objeto (null cuando no
-    // aplica, framework/grupo) — para que las tres ramas devuelvan la
-    // misma forma y el render de abajo no tenga que distinguir casos.
     if (!selected) return null;
     if (selected.kind === "framework") {
       return frameworkIntro
-        ? {
-            name: frameworkIntro.name,
-            description: frameworkIntro.description,
-            thresholdHigh: null,
-            thresholdLow: null,
-          }
+        ? { name: frameworkIntro.name, description: frameworkIntro.description, thresholdHigh: null, thresholdLow: null }
         : null;
     }
     if (selected.kind === "group") {
@@ -143,14 +143,12 @@ export default function CompetencyModelDiagram({
           type="button"
           onClick={() => setSelected({ kind: "framework" })}
           className={
-            "w-full text-left border rounded-lg px-4 py-3 mb-6 transition-colors " +
-            (selected?.kind === "framework"
-              ? "border-gray-400 bg-gray-50"
-              : "border-gray-200 hover:border-gray-300")
+            "w-full text-left border rounded-brujula-md px-4 py-3 mb-6 transition-colors " +
+            (selected?.kind === "framework" ? "border-ink-soft bg-surface-2" : "border-line hover:border-ink-soft")
           }
         >
-          <p className="text-sm font-semibold">{frameworkIntro.name}</p>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-sm font-semibold text-ink">{frameworkIntro.name}</p>
+          <p className="text-xs text-ink-soft mt-0.5">
             El marco general en el que se apoya todo lo de abajo — haz clic para leerlo.
           </p>
         </button>
@@ -182,7 +180,7 @@ export default function CompetencyModelDiagram({
             opacity={0.35}
             className="pointer-events-none"
           >
-            {GROUP_LABELS[q.code] || q.code}
+            {groupLabel(q.code)}
           </text>
         ))}
         {[1, 2, 3, 4, 5].map((level) => (
@@ -192,7 +190,7 @@ export default function CompetencyModelDiagram({
             cy={center}
             r={maxRadius * (level / 5)}
             fill="none"
-            stroke="#e5e7eb"
+            stroke="var(--line)"
             strokeWidth={1}
           />
         ))}
@@ -203,7 +201,7 @@ export default function CompetencyModelDiagram({
             y1={center}
             x2={p.axisX}
             y2={p.axisY}
-            stroke="#e5e7eb"
+            stroke="var(--line)"
             strokeWidth={1}
           />
         ))}
@@ -230,41 +228,36 @@ export default function CompetencyModelDiagram({
         })}
       </svg>
 
-      <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 mt-1">
+      <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-soft mt-1">
         {groupsPresent.map((code) => (
-          <button
-            key={code}
-            type="button"
-            onClick={() => setSelected({ kind: "group", code })}
-            className="flex items-center gap-1.5"
-          >
+          <button key={code} type="button" onClick={() => setSelected({ kind: "group", code })} className="flex items-center gap-1.5">
             <span
               className="inline-block w-2.5 h-2.5 rounded-full"
               style={{ backgroundColor: GROUP_COLORS[code] || "#6b7280" }}
             />
-            {GROUP_LABELS[code] || code}
+            {groupLabel(code)}
           </button>
         ))}
       </div>
 
-      <div className="mt-6 w-full border rounded-lg p-4 min-h-[7rem]">
+      <div className="mt-6 w-full border border-line rounded-brujula-md p-4 min-h-[7rem]">
         {selectedInfo ? (
           <>
-            <p className="text-sm font-semibold mb-1.5">{selectedInfo.name}</p>
-            <div className="flex flex-col gap-2 text-sm text-gray-700">
+            <p className="text-sm font-semibold text-ink mb-1.5">{selectedInfo.name}</p>
+            <div className="text-sm text-ink-soft">
               <FormattedParagraphs text={selectedInfo.description} />
             </div>
             {(selectedInfo.thresholdHigh || selectedInfo.thresholdLow) && (
               <div className="mt-3 flex flex-col gap-2">
                 {selectedInfo.thresholdHigh && (
-                  <p className="text-sm text-gray-700">
-                    <span className="font-bold text-gray-900">Valor alto: </span>
+                  <p className="text-sm text-ink-soft">
+                    <span className="font-bold text-ink">Valor alto: </span>
                     <FormattedInline text={selectedInfo.thresholdHigh} />
                   </p>
                 )}
                 {selectedInfo.thresholdLow && (
-                  <p className="text-sm text-gray-700">
-                    <span className="font-bold text-gray-900">Valor bajo: </span>
+                  <p className="text-sm text-ink-soft">
+                    <span className="font-bold text-ink">Valor bajo: </span>
                     <FormattedInline text={selectedInfo.thresholdLow} />
                   </p>
                 )}
@@ -272,9 +265,8 @@ export default function CompetencyModelDiagram({
             )}
           </>
         ) : (
-          <p className="text-sm text-gray-500">
-            Haz clic en Plenitud, en un rol, o en el nombre de una competencia para ver su
-            explicación aquí.
+          <p className="text-sm text-ink-soft">
+            Haz clic en Plenitud, en un rol, o en el nombre de una competencia para ver su explicación aquí.
           </p>
         )}
       </div>

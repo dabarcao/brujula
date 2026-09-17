@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { buttonPrimaryClassName } from "@/components/ui/ButtonPrimary";
+import { buttonSecondaryClassName } from "@/components/ui/ButtonSecondary";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -13,6 +15,7 @@ export default function EmailEvaluatorPicker({
   defaultEmails = [],
   canModifyExisting = true,
   submitLabel = "Enviar solicitud",
+  primary = false,
 }: {
   fieldName: string;
   minEmails: number;
@@ -30,6 +33,7 @@ export default function EmailEvaluatorPicker({
   // quitar antes de guardar (todavía no se han enviado).
   canModifyExisting?: boolean;
   submitLabel?: string;
+  primary?: boolean;
 }) {
   const [emails, setEmails] = useState<string[]>(defaultEmails);
   const [existingEmails] = useState<Set<string>>(new Set(defaultEmails));
@@ -59,22 +63,22 @@ export default function EmailEvaluatorPicker({
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <p className="text-xs font-medium text-gray-500 mb-2">
+        <p className="text-xs font-medium text-ink-soft mb-2">
           Emails añadidos ({emails.length} / mínimo {minEmails})
         </p>
         {emails.length === 0 ? (
-          <p className="text-sm text-gray-400 border rounded px-4 py-3">
+          <p className="text-sm text-ink-soft border border-line rounded-brujula-sm px-4 py-3">
             Todavía no has añadido ningún email.
           </p>
         ) : (
-          <table className="w-full text-sm border rounded overflow-hidden">
-            <tbody className="divide-y">
+          <table className="w-full text-sm border border-line rounded-brujula-sm overflow-hidden">
+            <tbody className="divide-y divide-line">
               {emails.map((email) => {
                 const locked = !canModifyExisting && existingEmails.has(email);
                 const savedCategory = categoryDefaultsByEmail?.[email] ?? categoryDefaultValue;
                 return (
                   <tr key={email}>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-2 text-ink break-words">
                       <input type="hidden" name={fieldName} value={email} />
                       {email}
                     </td>
@@ -82,7 +86,7 @@ export default function EmailEvaluatorPicker({
                       <td className="px-4 py-2 w-48">
                         {locked ? (
                           <>
-                            <span className="text-gray-500 text-xs">
+                            <span className="text-ink-soft text-xs">
                               {categoryOptions[savedCategory ?? ""] ?? savedCategory}
                             </span>
                             <input
@@ -95,7 +99,7 @@ export default function EmailEvaluatorPicker({
                           <select
                             name={`category_${email}`}
                             defaultValue={savedCategory}
-                            className="border rounded px-2 py-1 text-xs w-full"
+                            className="border border-line rounded-brujula-sm px-2 py-1 text-xs w-full bg-paper-deep text-ink"
                           >
                             {Object.entries(categoryOptions).map(([value, label]) => (
                               <option key={value} value={value}>
@@ -108,12 +112,12 @@ export default function EmailEvaluatorPicker({
                     )}
                     <td className="px-4 py-2 text-right w-20">
                       {locked ? (
-                        <span className="text-xs text-gray-300">Ya invitado</span>
+                        <span className="text-xs text-ink-soft">Ya invitado</span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => removeEmail(email)}
-                          className="text-xs underline text-red-700"
+                          className="text-xs underline text-ink-soft hover:text-ink"
                         >
                           Quitar
                         </button>
@@ -142,28 +146,49 @@ export default function EmailEvaluatorPicker({
             }
           }}
           placeholder="email@ejemplo.com"
-          className="border rounded px-3 py-2 text-sm flex-1"
+          className="border border-line rounded-brujula-sm px-3 py-2 text-sm flex-1 bg-paper-deep text-ink"
         />
         <button
           type="button"
           onClick={addEmail}
-          className="border rounded px-4 py-2 text-sm hover:bg-gray-50"
+          className="bg-transparent text-ink border border-line rounded-brujula-lg hover:bg-surface-2 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo text-sm px-4 py-2"
         >
           Añadir
         </button>
       </div>
-      {formError && <p className="text-xs text-red-700">{formError}</p>}
+      {formError && (
+        <p className="flex items-center gap-1.5 text-xs font-medium text-ink border border-line rounded-brujula-sm bg-surface-2 px-3 py-2">
+          <svg
+            aria-hidden="true"
+            focusable="false"
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <line x1="12" y1="8" x2="12" y2="12.5" />
+            <line x1="12" y1="15.5" x2="12" y2="15.51" />
+          </svg>
+          {formError}
+        </p>
+      )}
 
       <div>
         <button
           type="submit"
           disabled={emails.length < minEmails}
-          className="bg-black text-white rounded px-4 py-2 text-sm hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          className={`${primary ? buttonPrimaryClassName : buttonSecondaryClassName} text-sm`}
         >
           {submitLabel}
         </button>
         {emails.length < minEmails && (
-          <p className="text-xs text-gray-400 mt-2">
+          <p className="text-xs text-ink-soft mt-2">
             Añade {minEmails - emails.length} más para poder enviar.
           </p>
         )}
