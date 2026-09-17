@@ -6,6 +6,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["scripts/dev.sh"],
       "port": 3000
+    },
+    {
+      "name": "brujula-mvc-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["mvc-review/scripts/dev.sh"],
+      "port": 3100
     }
   ]
 }

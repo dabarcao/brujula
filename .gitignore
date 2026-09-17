@@ -40,6 +40,11 @@ yarn-error.log*
 # nunca deben subirse al repo
 /migrables
 
+# clon local del repo reingenierizado (brujula-app-mvc), para poder
+# arrancarlo con preview_start desde dentro de este project root — no es
+# parte de este repo, nunca debe subirse aquí
+/mvc-review
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
