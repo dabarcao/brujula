@@ -64,8 +64,27 @@ export function CompassBadge() {
   );
 }
 
-/** Fondo decorativo de brújula: la aguja de puntos sobre un anillo fino con 4 marcas cardinales, inclinada en 3D para que se lea como un objeto real y no un icono plano -- sin animación: es una marca, no un instrumento girando. Puramente decorativo: aria-hidden, pointer-events-none (heredado del className del caller). */
-export function CompassWatermark({ className = "" }: { className?: string }) {
+/**
+ * Fondo decorativo de brújula: la aguja de puntos sobre un anillo fino con
+ * 4 marcas cardinales, inclinada en 3D para que se lea como un objeto real
+ * y no un icono plano -- sin animación: es una marca, no un instrumento
+ * girando. Puramente decorativo: aria-hidden, pointer-events-none
+ * (heredado del className del caller).
+ *
+ * `opacity` es un parámetro, no un valor fijo (2026-09-17): el mismo 0.07
+ * que se lee bien en /login (fondo propio con degradado + viñeta en las
+ * esquinas, que ya ayuda a camuflarla) se veía "súper sólida" en el
+ * dashboard (fondo plano, sin ese tratamiento) -- cada pantalla pasa la
+ * suya en vez de compartir un único valor a ciegas. Por defecto 0.07,
+ * el mismo que ya tenía /login antes de este cambio.
+ */
+export function CompassWatermark({
+  className = "",
+  opacity = 0.07,
+}: {
+  className?: string;
+  opacity?: number;
+}) {
   const dots = buildNeedleDots(120, 120, 38, 88, 6, 1.9);
   const ticks: [number, number, number, number][] = [
     [120, 24, 120, 35],
@@ -77,8 +96,8 @@ export function CompassWatermark({ className = "" }: { className?: string }) {
   return (
     <div aria-hidden="true" className={className} style={{ perspective: "1400px" }}>
       <div
-        className="w-full h-full opacity-[0.16]"
-        style={{ transform: "rotateX(22deg) rotateY(14deg)", transformStyle: "preserve-3d" }}
+        className="w-full h-full"
+        style={{ opacity, transform: "rotateX(22deg) rotateY(14deg)", transformStyle: "preserve-3d" }}
       >
         <svg viewBox="0 0 240 240" className="w-full h-full" focusable="false">
           <defs>

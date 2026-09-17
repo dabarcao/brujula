@@ -49,7 +49,10 @@ export default async function LoginPage({
           propósito -- la mayor parte del disco sangra fuera del main
           (que tiene overflow-hidden); solo asoma el cuarto superior-
           izquierdo, lejos del centro donde vive la tarjeta, así el
-          anillo/aguja nunca queda tapado. */}
+          anillo/aguja nunca queda tapado. Opacidad por defecto del
+          componente (0.07) -- esta pantalla ya estaba bien así, no se ha
+          tocado; el resto de la app usa una más baja, ver
+          src/app/dashboard/layout.tsx. */}
       <CompassWatermark
         className="absolute pointer-events-none select-none right-[-32%] bottom-[-28%] w-[170vw] max-w-none sm:w-[1500px] aspect-square -z-0"
       />
