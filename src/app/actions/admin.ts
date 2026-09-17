@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { sendOrgAdminInviteEmail } from "@/lib/invitationEmails";
 
 export async function createOrganizationAsAdmin(formData: FormData) {
   const orgName = String(formData.get("orgName") || "").trim();
@@ -18,6 +19,14 @@ export async function createOrganizationAsAdmin(formData: FormData) {
 
   if (error) {
     redirect("/admin?error=" + encodeURIComponent(error.message));
+  }
+
+  if (inviteToken) {
+    await sendOrgAdminInviteEmail(supabase, {
+      email: adminEmail,
+      orgName,
+      inviteToken: String(inviteToken),
+    });
   }
 
   redirect(

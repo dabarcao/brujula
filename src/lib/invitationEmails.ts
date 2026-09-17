@@ -125,6 +125,54 @@ export async function sendThankYouEmail(supabase: SupabaseClient, email: string)
   });
 }
 
+// Se llama justo después de crear una empresa nueva (createOrganizationAsAdmin,
+// src/app/actions/admin.ts) — avisa al primer administrador (Supervisor)
+// de que ya tiene una plaza esperándole. {empresa} es el único marcador
+// del asunto/cuerpo; el enlace de invitación va aparte, como botón fijo,
+// igual que el resto de emails de invitación.
+export async function sendOrgAdminInviteEmail(
+  supabase: SupabaseClient,
+  { email, orgName, inviteToken }: { email: string; orgName: string; inviteToken: string }
+): Promise<void> {
+  const [subjectTemplate, bodyTemplate] = await Promise.all([
+    getPlatformText(supabase, "org_admin_invite_email_subject", "Te han dado de alta en Brújula"),
+    getPlatformText(
+      supabase,
+      "org_admin_invite_email_body",
+      "Te han dado de alta como administrador/a de **{empresa}** en Brújula.\n\nCompleta tu alta para empezar a organizar el feedback de tu equipo."
+    ),
+  ]);
+
+  const siteUrl = getSiteUrl();
+
+  await sendEmail({
+    to: email,
+    subject: subjectTemplate.replaceAll("{empresa}", orgName),
+    html: orgAdminInviteEmailHtml({
+      bodyHtml: markdownLiteToHtml(bodyTemplate.replaceAll("{empresa}", orgName)),
+      link: `${siteUrl}/invitacion/${inviteToken}`,
+    }),
+  });
+}
+
+function orgAdminInviteEmailHtml({ bodyHtml, link }: { bodyHtml: string; link: string }) {
+  return `
+    <div style="font-family: Arial, Helvetica, sans-serif; color: #171717; max-width: 480px; margin: 0 auto; padding: 24px;">
+      <p>Hola,</p>
+      ${bodyHtml}
+      <p style="margin: 32px 0;">
+        <a
+          href="${link}"
+          style="background: #000; color: #fff; padding: 12px 24px; border-radius: 6px; text-decoration: none; display: inline-block;"
+        >
+          Completar mi alta
+        </a>
+      </p>
+      <p style="color: #6b7280; font-size: 13px;">— Brújula</p>
+    </div>
+  `;
+}
+
 function thankYouEmailHtml({ bodyHtml, link }: { bodyHtml: string; link: string }) {
   return `
     <div style="font-family: Arial, Helvetica, sans-serif; color: #171717; max-width: 480px; margin: 0 auto; padding: 24px;">
