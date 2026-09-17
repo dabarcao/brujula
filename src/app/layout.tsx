@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Brújula",
-  description: "Feedback anónimo entre compañeros, con orientación hacia la mejora.",
+  description: "Tu brújula para crecer: feedback anónimo y honesto de las personas que te conocen mejor.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
