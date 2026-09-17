@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { signIn } from "@/app/actions/auth";
 import { buttonPrimaryClassName } from "@/components/ui/ButtonPrimary";
 import ErrorBanner from "@/components/ui/ErrorBanner";
@@ -217,6 +218,17 @@ export default async function LoginPage({
             </button>
           </form>
         </div>
+
+        {/* La raíz del dominio (src/app/page.tsx) deja de enlazar /registro
+            desde el rediseño -- sin este enlace, una cuenta individual no
+            tenía ninguna forma de encontrar cómo darse de alta salvo
+            escribiendo la URL de memoria. */}
+        <p className="text-center text-sm text-ink-soft mt-6">
+          ¿No tienes empresa?{" "}
+          <Link href="/registro" className="text-ink underline">
+            Crea tu cuenta individual
+          </Link>
+        </p>
       </div>
     </main>
   );
