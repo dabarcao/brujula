@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { respondToReportGroup, closeReportGroup } from "@/app/actions/reportGroups";
 import CompetencyComparisonChart from "@/components/CompetencyComparisonChart";
+import { FormattedParagraphs } from "@/components/FormattedText";
 
 type GroupMember = {
   member_id: string;
@@ -18,6 +19,7 @@ type GroupDetail = {
   is_creator: boolean;
   my_status: "pending" | "accepted" | "rejected" | null;
   ai_interpretation: string | null;
+  ai_open_answers_text: string | null;
   members: GroupMember[];
 };
 
@@ -81,6 +83,7 @@ export default async function ReportGroupPage({
     competencySummary = (summaryData as CompetencySummaryRow[] | null) || [];
   }
   const aiInterpretation = group.ai_interpretation;
+  const aiOpenAnswersText = group.ai_open_answers_text;
 
   // Igual que el comparativo individual (sección 9): la media de los
   // evaluadores como gajo de color, la media de la propia
@@ -186,8 +189,20 @@ export default async function ReportGroupPage({
                 Interpretación del grupo{" "}
                 <span className="font-normal text-gray-400">(generado por IA)</span>
               </p>
-              <div className="text-sm text-gray-700 flex flex-col gap-3 whitespace-pre-line">
-                {aiInterpretation}
+              <div className="text-sm text-gray-700 flex flex-col gap-3">
+                <FormattedParagraphs text={aiInterpretation} />
+              </div>
+            </div>
+          )}
+
+          {aiOpenAnswersText && (
+            <div className="mb-8 border rounded-lg p-4 bg-gray-50">
+              <p className="text-xs font-semibold text-gray-500 mb-2">
+                Patrones en las respuestas abiertas{" "}
+                <span className="font-normal text-gray-400">(generado por IA)</span>
+              </p>
+              <div className="text-sm text-gray-700 flex flex-col gap-3">
+                <FormattedParagraphs text={aiOpenAnswersText} />
               </div>
             </div>
           )}

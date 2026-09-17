@@ -51,6 +51,10 @@ export default async function NewIndividual360Page() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const minClosesAt = tomorrow.toISOString().slice(0, 10);
 
+  const inOneMonth = new Date();
+  inOneMonth.setMonth(inOneMonth.getMonth() + 1);
+  const defaultClosesAt = inOneMonth.toISOString().slice(0, 10);
+
   const [introText, seleccionText, confirmacionText] = await Promise.all([
     getPlatformText(
       supabase,
@@ -114,7 +118,7 @@ export default async function NewIndividual360Page() {
             type="date"
             required
             min={minClosesAt}
-            defaultValue={minClosesAt}
+            defaultValue={defaultClosesAt}
             className="border rounded px-3 py-2"
           />
         </label>

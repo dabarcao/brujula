@@ -8,6 +8,7 @@ import {
   sendInvitationEmailsForNewInvitees,
   sendThankYouEmail,
 } from "@/lib/invitationEmails";
+import { generateAdHocInterpretation } from "@/lib/aiInterpretation";
 
 export async function createFeedbackRequest(formData: FormData) {
   const inviteeIds = formData.getAll("inviteeIds").map(String);
@@ -90,6 +91,15 @@ export async function closeFeedbackRequest(formData: FormData) {
 
   if (error) {
     redirect(`/dashboard/feedback/${requestId}?error=` + encodeURIComponent(error.message));
+  }
+
+  const interpretation = await generateAdHocInterpretation(supabase, requestId);
+  if (interpretation) {
+    await supabase.rpc("save_ai_interpretation", {
+      p_request_id: requestId,
+      p_text: interpretation.resumen,
+      p_open_answers_text: interpretation.resumenAbiertas,
+    });
   }
 
   revalidatePath("/dashboard");

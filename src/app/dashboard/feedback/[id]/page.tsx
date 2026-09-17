@@ -336,23 +336,29 @@ export default async function FeedbackRequestPage({
     .select("id", { count: "exact", head: true })
     .eq("feedback_request_id", id);
 
-  const [progressPendingMessage, progressSelfReminder, finalizeConfirmMessage] = await Promise.all([
-    getPlatformText(
-      supabase,
-      "progress_pending_message",
-      "Han respondido {respondidas} de {necesarias} necesarias para poder ver algo. Nadie sabe quién ha respondido ya."
-    ),
-    getPlatformText(
-      supabase,
-      "progress_pending_self_reminder",
-      "Además, hasta que no hagas tu propia autoevaluación tampoco podrás ver cómo te ven los demás."
-    ),
-    getPlatformText(
-      supabase,
-      "finalize_confirm_message",
-      "Si finalizas tu informe ahora, {pendientes} personas que todavía no han respondido no tendrán opción de hacerlo. ¿Seguro que quieres finalizarlo?"
-    ),
-  ]);
+  const [progressPendingMessage, progressSelfReminder, finalizeConfirmMessage, preliminaryNotice] =
+    await Promise.all([
+      getPlatformText(
+        supabase,
+        "progress_pending_message",
+        "Han respondido {respondidas} de {necesarias} necesarias para poder ver algo. Nadie sabe quién ha respondido ya."
+      ),
+      getPlatformText(
+        supabase,
+        "progress_pending_self_reminder",
+        "Además, hasta que no hagas tu propia autoevaluación tampoco podrás ver cómo te ven los demás."
+      ),
+      getPlatformText(
+        supabase,
+        "finalize_confirm_message",
+        "Si finalizas tu informe ahora, {pendientes} personas que todavía no han respondido no tendrán opción de hacerlo. ¿Seguro que quieres finalizarlo?"
+      ),
+      getPlatformText(
+        supabase,
+        "cycle_preliminary_notice",
+        "Es preliminar: de momento solo ves los datos agregados. Fecha límite sugerida: {fecha}. Los comentarios de texto y la interpretación de tu perfil se desbloquean cuando tú decidas finalizarlo — no antes, y no automáticamente."
+      ),
+    ]);
 
   const cycleClosesAt: string | null = request.closes_at ?? null;
 
@@ -601,11 +607,7 @@ export default async function FeedbackRequestPage({
             {isCycle && !isFinal && (
               <div className="mb-6 border rounded-lg p-4">
                 <p className="text-xs text-gray-500 mb-3">
-                  Es preliminar: de momento solo ves los datos agregados.
-                  {cycleClosesAt ? ` Fecha límite sugerida: ${cycleClosesAt}.` : ""} Los
-                  comentarios de texto y la interpretación de tu perfil se
-                  desbloquean cuando tú decidas finalizarlo — no antes, y no
-                  automáticamente.
+                  {preliminaryNotice.replace("{fecha}", cycleClosesAt ?? "sin definir")}
                 </p>
                 <FinalizeReportButton
                   requestId={id}
@@ -620,7 +622,7 @@ export default async function FeedbackRequestPage({
             {isCycle && isFinal && cycleClosesAt && (
               <p className="text-xs text-gray-500 mb-4">Cerrado el {cycleClosesAt}.</p>
             )}
-            {isCycle && showRestrictedContent && request.ai_interpretation && (
+            {showRestrictedContent && request.ai_interpretation && (
               <div className="mb-8 border rounded-lg p-4 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500 mb-2">
                   Interpretación de tu perfil{" "}
@@ -654,7 +656,7 @@ export default async function FeedbackRequestPage({
               </div>
             )}
             {isCycle && showRestrictedContent && <SaboteadoresReport rows={saboteadores} />}
-            {isCycle && showRestrictedContent && request.ai_open_answers_text && (
+            {showRestrictedContent && request.ai_open_answers_text && (
               <div className="mb-4 border rounded-lg p-4 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500 mb-2">
                   Resumen de las respuestas abiertas{" "}

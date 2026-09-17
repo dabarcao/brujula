@@ -62,7 +62,8 @@ export async function closeReportGroup(formData: FormData) {
   if (interpretation) {
     await supabase.rpc("save_report_group_interpretation", {
       p_group_id: groupId,
-      p_text: interpretation,
+      p_text: interpretation.competencias,
+      p_open_answers_text: interpretation.resumenAbiertas,
     });
   }
 

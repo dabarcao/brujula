@@ -43,6 +43,10 @@ export default async function NewCyclePage({
     .neq("id", currentMember.id)
     .order("email");
 
+  const inOneMonth = new Date();
+  inOneMonth.setMonth(inOneMonth.getMonth() + 1);
+  const defaultClosesAt = inOneMonth.toISOString().slice(0, 10);
+
   return (
     <main className="flex-1 p-8 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
@@ -82,7 +86,13 @@ export default async function NewCyclePage({
 
         <label className="flex flex-col gap-1 text-sm">
           Fecha de cierre
-          <input name="closesAt" type="date" required className="border rounded px-3 py-2" />
+          <input
+            name="closesAt"
+            type="date"
+            required
+            defaultValue={defaultClosesAt}
+            className="border rounded px-3 py-2"
+          />
         </label>
 
         <div className="flex flex-col gap-1 text-sm">

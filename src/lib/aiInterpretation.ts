@@ -255,49 +255,97 @@ Tono humanista, cercano, nunca de evaluación de desempeño, en las tres partes 
   }
 }
 
-type GroupCompetencyRow = {
+type NarrativeRow = {
   competency_code: string;
-  competency_name: string;
-  role_name: string | null;
-  peer_avg_value: number | null;
-  self_avg_value: number | null;
-  member_count: number;
+  competency_name: string | null;
+  avg_value: number;
+  mention_count: number;
 };
 
-// Interpretación del informe de grupo (spec.md sección 17, "Informes de
-// grupo" — fase 1) — se llama una única vez, al cerrar el grupo
-// (closeReportGroup, src/app/actions/reportGroups.ts). Mismo criterio
-// que el perfil individual: si falla o no hay clave, devuelve null sin
-// reintento automático.
-export async function generateReportGroupInterpretation(
+export type AdHocInterpretationResult = {
+  resumen: string;
+  resumenAbiertas: string | null;
+};
+
+// Interpretación de una solicitud de "feedback ágil" (ad_hoc) — a
+// diferencia del 360, no hay autoevaluación con la que comparar ni
+// saboteadores (esa plantilla no los tiene), así que es un prompt más
+// corto. Se llama al cerrar la solicitud (closeFeedbackRequest,
+// src/app/actions/feedback.ts) — mismo criterio de "una vez, sin
+// reintento automático" que el resto de interpretaciones.
+export async function generateAdHocInterpretation(
   supabase: SupabaseClient,
-  groupId: string
-): Promise<string | null> {
+  requestId: string
+): Promise<AdHocInterpretationResult | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
-  const { data } = await supabase.rpc("get_report_group_competency_summary", {
-    p_group_id: groupId,
-  });
-  const rows = (data as GroupCompetencyRow[] | null) || [];
-  if (rows.length === 0) return null;
+  const [{ data: narrativeData }, { data: openAnswersData }, { data: thresholdsData }] =
+    await Promise.all([
+      supabase.rpc("get_request_competency_narrative", { p_request_id: requestId }),
+      supabase
+        .from("feedback_answers")
+        .select(
+          "answer_text, survey_questions(prompt, question_type), feedback_responses!inner(feedback_request_id)"
+        )
+        .eq("feedback_responses.feedback_request_id", requestId),
+      supabase.from("competency_frameworks").select("code, name, threshold_high, threshold_low"),
+    ]);
 
-  const lines = rows.map(
+  const narrative = (narrativeData as NarrativeRow[] | null) || [];
+  if (narrative.length === 0) return null;
+
+  const lines = narrative.map(
     (row) =>
-      `- ${row.competency_name} (${row.role_name || "Plenitud"}): media de evaluadores ${row.peer_avg_value ?? "sin dato"}, media de autopercepción ${row.self_avg_value ?? "sin dato"}, ${row.member_count} personas con dato`
+      `- ${row.competency_name || row.competency_code}: media ${row.avg_value}/5, mencionada por ${row.mention_count} personas`
   );
 
-  const prompt = `Eres un asistente que ayuda a interpretar el perfil agregado de un grupo dentro de Brújula, una herramienta de feedback anónimo humanista (no de evaluación de desempeño). Cada competencia trae dos medias del grupo (escala 1-5), calculadas a partir del último 360 cerrado de cada miembro: la media de cómo les evalúan sus compañeros, y la media de cómo se autoevalúan ellos mismos — cada persona pesa igual, sin importar cuántos evaluadores tuvo.
+  const openByPrompt = new Map<string, string[]>();
+  for (const row of (openAnswersData as unknown as OpenAnswerRow[] | null) || []) {
+    if (!row.survey_questions || row.survey_questions.question_type !== "open") continue;
+    if (!row.answer_text) continue;
+    const key = row.survey_questions.prompt;
+    if (!openByPrompt.has(key)) openByPrompt.set(key, []);
+    openByPrompt.get(key)!.push(row.answer_text);
+  }
 
-Datos del grupo:
+  const thresholdLines = ((thresholdsData as FrameworkThresholdRow[] | null) || [])
+    .filter((t) => t.threshold_high || t.threshold_low)
+    .map(
+      (t) =>
+        `- ${t.name}: valor alto = ${t.threshold_high || "sin dato"}; valor bajo = ${t.threshold_low || "sin dato"}`
+    )
+    .join("\n");
+
+  let prompt = `Eres un asistente que ayuda a interpretar los resultados de una petición de feedback ágil en Brújula, una herramienta de feedback anónimo humanista (no de evaluación de desempeño). A diferencia de un 360, aquí no hay autoevaluación con la que comparar — son solo las valoraciones de quienes han respondido.
+
+Datos de competencias mencionadas (escala 1-5):
 ${lines.join("\n")}
+${
+  thresholdLines
+    ? `\nPara referencia (qué indica un valor alto o bajo en cada competencia — úsalo para calibrar el tono, no lo copies literalmente ni lo cites como lista):\n${thresholdLines}\n`
+    : ""
+}
+Escribe una interpretación en español, en 2ª persona ("tú"), en 2-3 párrafos cortos:
+1. Qué destaca (1-2 competencias con nota más alta o más mencionadas).
+2. Qué competencia tiene más recorrido según la media, sin alarmismo, como oportunidad de desarrollo.
+3. Si hay algo llamativo por lo dispares que son las notas entre quienes respondieron en alguna competencia, coméntalo como pregunta reflexiva.`;
 
-Escribe una interpretación en español, en 2ª persona plural ("vuestro equipo", "como grupo"), en 2-3 párrafos cortos:
-1. Qué competencias están más desarrolladas en el grupo según sus compañeros (2-3 con nota más alta).
-2. Qué competencias tienen más recorrido en el grupo (2-3 con nota más baja) — sin alarmismo, en tono de oportunidad de desarrollo colectivo.
-3. Si hay una competencia donde la autopercepción del grupo se aleja notablemente de cómo les ve el resto (en cualquier sentido), coméntala como pregunta reflexiva, nunca como veredicto.
+  if (openByPrompt.size > 0) {
+    const openLines = Array.from(openByPrompt.entries())
+      .map(([q, answers]) => `Pregunta: "${q}"\n${answers.map((a) => `- ${a}`).join("\n")}`)
+      .join("\n\n");
+    prompt += `
 
-Tono humanista, cercano, nunca de evaluación de desempeño ni de ranking entre personas — es un perfil de grupo, no de individuos. No uses listas ni encabezados, solo párrafos de texto corrido separados por una línea en blanco.`;
+Comentarios de texto libre que te han escrito (anonimizados, sin indicar quién escribió cada uno):
+${openLines}
+
+Cuando termines lo anterior, si en esos comentarios hay como máximo 1-2 temas que se repitan en varios comentarios de personas distintas (nunca a partir de un solo comentario aislado), añade en una línea aparte exactamente el texto "${RESPUESTAS_ABIERTAS_MARKER}" y, a continuación, un párrafo corto con ese resumen. No cites ningún comentario literalmente. Dilo explícitamente como una síntesis de las respuestas abiertas (por ejemplo, "en las respuestas abiertas se repite..."). Esta parte va aparte, no la mezcles con la anterior. Si no hay ningún tema que se repita, no escribas ni el marcador ni esta parte.`;
+  }
+
+  prompt += `
+
+Tono humanista, cercano, nunca de evaluación de desempeño. No uses listas ni encabezados, solo párrafos de texto corrido separados por una línea en blanco.`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -319,9 +367,138 @@ Tono humanista, cercano, nunca de evaluación de desempeño ni de ranking entre 
       return null;
     }
 
+    const data = await res.json();
+    const text = (data?.content?.[0]?.text as string | undefined)?.trim();
+    if (!text) return null;
+
+    let resumen = text;
+    let resumenAbiertas: string | null = null;
+
+    if (resumen.includes(RESPUESTAS_ABIERTAS_MARKER)) {
+      const [before, after] = resumen.split(RESPUESTAS_ABIERTAS_MARKER);
+      resumen = before.trim();
+      resumenAbiertas = after.trim() || null;
+    }
+
+    return { resumen, resumenAbiertas };
+  } catch (e) {
+    console.error("No se pudo generar la interpretación IA del feedback ágil:", e);
+    return null;
+  }
+}
+
+type GroupCompetencyRow = {
+  competency_code: string;
+  competency_name: string;
+  role_name: string | null;
+  peer_avg_value: number | null;
+  self_avg_value: number | null;
+  member_count: number;
+};
+
+export type ReportGroupInterpretationResult = {
+  competencias: string;
+  resumenAbiertas: string | null;
+};
+
+// Interpretación del informe de grupo (spec.md sección 17, "Informes de
+// grupo" — fase 1) — se llama una única vez, al cerrar el grupo
+// (closeReportGroup, src/app/actions/reportGroups.ts). Mismo criterio
+// que el perfil individual: si falla o no hay clave, devuelve null sin
+// reintento automático.
+//
+// Las respuestas abiertas se pasan EN BRUTO (todos los comentarios de
+// todos los miembros, sin resumir antes) y no el resumen ya generado
+// para cada 360 individual (ai_open_answers_text) — un patrón real de
+// grupo puede estar formado por comentarios que, dentro del 360 de cada
+// persona por separado, nunca llegaron a repetirse lo suficiente como
+// para entrar en su propio resumen individual. Resumir primero por
+// persona escondería justo el tipo de patrón que este informe busca.
+export async function generateReportGroupInterpretation(
+  supabase: SupabaseClient,
+  groupId: string
+): Promise<ReportGroupInterpretationResult | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const [{ data }, { data: openAnswersData }] = await Promise.all([
+    supabase.rpc("get_report_group_competency_summary", { p_group_id: groupId }),
+    supabase.rpc("get_report_group_open_answers", { p_group_id: groupId }),
+  ]);
+  const rows = (data as GroupCompetencyRow[] | null) || [];
+  if (rows.length === 0) return null;
+
+  const lines = rows.map(
+    (row) =>
+      `- ${row.competency_name} (${row.role_name || "Plenitud"}): media de evaluadores ${row.peer_avg_value ?? "sin dato"}, media de autopercepción ${row.self_avg_value ?? "sin dato"}, ${row.member_count} personas con dato`
+  );
+
+  let prompt = `Eres un asistente que ayuda a interpretar el perfil agregado de un grupo dentro de Brújula, una herramienta de feedback anónimo humanista (no de evaluación de desempeño). Cada competencia trae dos medias del grupo (escala 1-5), calculadas a partir del último 360 cerrado de cada miembro: la media de cómo les evalúan sus compañeros, y la media de cómo se autoevalúan ellos mismos — cada persona pesa igual, sin importar cuántos evaluadores tuvo.
+
+Datos del grupo:
+${lines.join("\n")}
+
+Escribe una interpretación en español, en 2ª persona plural ("vuestro equipo", "como grupo"), en 2-3 párrafos cortos:
+1. Qué competencias están más desarrolladas en el grupo según sus compañeros (2-3 con nota más alta).
+2. Qué competencias tienen más recorrido en el grupo (2-3 con nota más baja) — sin alarmismo, en tono de oportunidad de desarrollo colectivo.
+3. Si hay una competencia donde la autopercepción del grupo se aleja notablemente de cómo les ve el resto (en cualquier sentido), coméntala como pregunta reflexiva, nunca como veredicto.`;
+
+  const openComments = ((openAnswersData as { answer_text: string }[] | null) || [])
+    .map((r) => r.answer_text)
+    .filter(Boolean);
+
+  if (openComments.length > 0) {
+    prompt += `
+
+Comentarios de texto libre recibidos por los miembros del grupo (anonimizados, sin indicar quién los escribió ni sobre quién es cada uno):
+${openComments.map((c) => `- ${c}`).join("\n")}
+
+Cuando termines la interpretación de competencias, busca patrones que se repitan en comentarios de al menos dos personas distintas del grupo (nunca a partir de un comentario aislado). Si encuentras alguno, añade en una línea aparte exactamente el texto "${RESPUESTAS_ABIERTAS_MARKER}" y, a continuación, hasta 3 párrafos cortos, cada uno empezando con su etiqueta en **negrita**, solo si aplica:
+- **Reconocimiento:** un comportamiento que varias personas mencionan como algo que funciona y aporta valor al equipo.
+- **Desafío:** una dificultad o fricción que se repite en varias personas.
+- **Consejo:** una sugerencia o "píldora" práctica que se repite o que se desprende claramente de varios comentarios.
+
+Escribe cada uno en 2ª persona plural ("en vuestro equipo..."). Omite cualquiera de los tres si no hay un patrón real que lo sostenga — no fuerces ninguna categoría. No cites ningún comentario literalmente ni digas a quién se refería. Si no hay ningún patrón en ninguna categoría, no escribas ni el marcador ni nada de esta parte.`;
+  }
+
+  prompt += `
+
+Tono humanista, cercano, nunca de evaluación de desempeño ni de ranking entre personas — es un perfil de grupo, no de individuos. No uses listas ni encabezados, solo párrafos de texto corrido separados por una línea en blanco.`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 1536,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("Anthropic API error:", res.status, await res.text());
+      return null;
+    }
+
     const responseData = await res.json();
     const text = (responseData?.content?.[0]?.text as string | undefined)?.trim();
-    return text || null;
+    if (!text) return null;
+
+    let competencias = text;
+    let resumenAbiertas: string | null = null;
+
+    if (competencias.includes(RESPUESTAS_ABIERTAS_MARKER)) {
+      const [before, after] = competencias.split(RESPUESTAS_ABIERTAS_MARKER);
+      competencias = before.trim();
+      resumenAbiertas = after.trim() || null;
+    }
+
+    return { competencias, resumenAbiertas };
   } catch (e) {
     console.error("No se pudo generar la interpretación IA del grupo:", e);
     return null;
