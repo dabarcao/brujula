@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { updateOrganizationName } from "@/app/actions/admin";
+import { signOut } from "@/app/actions/auth";
 import Card from "@/components/ui/Card";
 import AggregateBadge from "@/components/ui/AggregateBadge";
 import ButtonPrimary from "@/components/ui/ButtonPrimary";
@@ -62,9 +63,14 @@ export default async function AdminOrganizationMembersPage({
     <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-semibold">{organization?.name || "Empresa"}</h1>
-        <Link href="/admin" className="text-sm underline text-ink-soft">
-          Volver a empresas
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/admin" className="text-sm underline text-ink-soft">
+            Volver a empresas
+          </Link>
+          <form action={signOut}>
+            <button className="text-sm underline text-ink-soft">Cerrar sesión</button>
+          </form>
+        </div>
       </div>
 
       {updated && (
