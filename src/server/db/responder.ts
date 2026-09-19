@@ -52,6 +52,7 @@ export type ResponderContext = {
   used?: boolean;
   requiresLogin?: boolean;
   isSelf?: boolean;
+  requesterFullName?: string | null;
   questions?: ResponderQuestion[];
   scaleLevels?: ScaleLevel[];
   competencies?: CompetencyOption[];
@@ -93,6 +94,7 @@ type RawResponderContext = {
   used?: boolean;
   requires_login?: boolean;
   is_self?: boolean;
+  requester_full_name?: string | null;
   questions?: RawResponderQuestion[];
   scale_levels?: ScaleLevel[];
   competencies?: CompetencyOption[];
@@ -120,6 +122,7 @@ export async function getResponderContext(token: string): Promise<ResponderConte
     used: raw.used,
     requiresLogin: raw.requires_login,
     isSelf: raw.is_self,
+    requesterFullName: raw.requester_full_name,
     questions: raw.questions?.map((q) => ({
       id: q.id,
       prompt: q.prompt,

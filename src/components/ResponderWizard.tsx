@@ -5,7 +5,6 @@ import { submitFeedbackResponse } from "@/app/actions/feedback";
 import CompetencyPicker from "@/components/CompetencyPicker";
 import ScaleSlider from "@/components/ScaleSlider";
 import ProgressBar from "@/components/ui/ProgressBar";
-import AnonymityBadge from "@/components/ui/AnonymityBadge";
 import BookmarkChip from "@/components/ui/BookmarkChip";
 import ButtonPrimary from "@/components/ui/ButtonPrimary";
 import ButtonSecondary from "@/components/ui/ButtonSecondary";
@@ -28,24 +27,6 @@ type CompetencyOption = {
   code: string;
   name: string;
 };
-
-// spec-4-4-responder-invitation-screens-redesign.md, frozen Intent
-// ("Investigated, not guessed: which question triggers the
-// anonymity-badge emphasis"): the base default_360_cycle template's
-// challenge question (supabase/migrations/0006_departments_and_360_
-// template.sql:293), matched by exact prompt text rather than a fixed
-// position -- other request types (ad-hoc, custom questionnaires) may not
-// have this question at all, in which case the emphasis simply never
-// fires (safe degradation).
-const CHALLENGE_QUESTION_PROMPT = "¿Qué reto tiene esta persona en el desarrollo de su liderazgo?";
-
-// How long the anonymity badge stays visibly emphasized before the wizard
-// actually advances to the next question -- long enough to read as a
-// deliberate reconfirmation (not a flicker), short enough to never read as
-// blocking (EXPERIENCE.md Key Flows, Diego: "reconfirming, not
-// interrupting"). Same order of magnitude as this codebase's other
-// one-shot entrance animations (globals.css brujula-ack-in, 400ms).
-const EMPHASIS_HOLD_MS = 550;
 
 // CSS class applied imperatively (see the `step`-driven effect below) to
 // whichever question/review panel is currently visible, restarted via a
@@ -213,8 +194,6 @@ export default function ResponderWizard({
   const [draftValues, setDraftValues] = useState<DraftValues>({});
   const [ready, setReady] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
-  const [advancing, setAdvancing] = useState(false);
-  const [emphasizedQuestionId, setEmphasizedQuestionId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Seed local, from-here-on-mutable state from the draft exactly once,
@@ -366,25 +345,6 @@ export default function ResponderWizard({
 
     setStepError(null);
     const next = Math.min(step + 1, total);
-
-    // Anonymity-badge emphasis (spec-4-4 frozen Intent, "the emphasized
-    // moment is a per-question advance, not final form submission"):
-    // fires exactly once, at the challenge question's own "next" action,
-    // matched by prompt text (see CHALLENGE_QUESTION_PROMPT above) --
-    // never by position, so it degrades safely on any template that
-    // doesn't have this exact question.
-    if (currentQuestion && currentQuestion.prompt.trim() === CHALLENGE_QUESTION_PROMPT) {
-      setAdvancing(true);
-      setEmphasizedQuestionId(currentQuestion.id);
-      window.setTimeout(() => {
-        setEmphasizedQuestionId(null);
-        setAdvancing(false);
-        setStep(next);
-        saveDraft(next);
-      }, EMPHASIS_HOLD_MS);
-      return;
-    }
-
     setStep(next);
     saveDraft(next);
   }
@@ -492,11 +452,6 @@ export default function ResponderWizard({
                 className="border border-line rounded-brujula-sm px-3 py-2 text-sm bg-paper-deep text-ink"
               />
             )}
-
-            <AnonymityBadge
-              className="self-start mt-3 px-3 py-1.5"
-              emphasized={emphasizedQuestionId === question.id}
-            />
           </div>
         );
       })}
@@ -515,7 +470,7 @@ export default function ResponderWizard({
       {stepError && <p className="text-sm text-red-700">{stepError}</p>}
 
       <div className="flex items-center justify-between">
-        <ButtonSecondary onClick={goBack} disabled={step === 0 || advancing}>
+        <ButtonSecondary onClick={goBack} disabled={step === 0}>
           Anterior
         </ButtonSecondary>
         {isReview ? (
@@ -550,9 +505,7 @@ export default function ResponderWizard({
             )}
           </ButtonPrimary>
         ) : (
-          <ButtonPrimary onClick={goNext} disabled={advancing}>
-            Siguiente
-          </ButtonPrimary>
+          <ButtonPrimary onClick={goNext}>Siguiente</ButtonPrimary>
         )}
       </div>
     </form>

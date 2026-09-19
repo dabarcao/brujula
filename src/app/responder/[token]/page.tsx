@@ -36,6 +36,7 @@ type ResponderContext = {
   used?: boolean;
   requires_login?: boolean;
   is_self?: boolean;
+  requester_full_name?: string | null;
   questions?: Question[];
   scale_levels?: ScaleLevel[];
   competencies?: CompetencyOption[];
@@ -65,6 +66,7 @@ export default async function RespondPage({
       used: result.used,
       requires_login: result.requiresLogin,
       is_self: result.isSelf,
+      requester_full_name: result.requesterFullName,
       questions: result.questions?.map((q) => ({
         id: q.id,
         prompt: q.prompt,
@@ -160,7 +162,13 @@ export default async function RespondPage({
         </Link>
       </div>
 
-      <p className="text-sm text-ink-soft mb-6">
+      {!isSelf && ctx.requester_full_name && (
+        <p className="text-sm text-ink-soft mb-1">
+          Este feedback es para <strong className="text-ink">{ctx.requester_full_name}</strong>.
+        </p>
+      )}
+
+      <p className="text-sm font-semibold text-ink mb-6">
         {isSelf
           ? "Esta es tu propia valoración: no es anónima, es tu punto de vista."
           : "Tu respuesta es anónima: ni la persona que la solicitó ni nadie más podrá saber que la escribiste tú."}
