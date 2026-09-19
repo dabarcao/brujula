@@ -130,17 +130,19 @@ export async function respondToGroup(groupId: string, accept: boolean): Promise<
  * aiInterpretationManager), but a subsequent save failure propagates like
  * every other RPC call in this file.
  */
-export async function closeGroup(groupId: string): Promise<{ aiInterpretation: string | null }> {
+export async function closeGroup(
+  groupId: string
+): Promise<{ aiInterpretation: string | null; aiOpenPatternsText: string | null }> {
   await closeReportGroup(groupId);
 
   // generateReportGroupInterpretation never throws (see aiInterpretationManager) --
   // missing API key, empty summary, or a failed Anthropic call all resolve to null.
-  const aiInterpretation = await generateReportGroupInterpretation(groupId);
-  if (aiInterpretation) {
-    await saveReportGroupInterpretation(groupId, aiInterpretation);
+  const result = await generateReportGroupInterpretation(groupId);
+  if (result) {
+    await saveReportGroupInterpretation(groupId, result.competencias, result.patterns);
   }
 
-  return { aiInterpretation };
+  return { aiInterpretation: result?.competencias ?? null, aiOpenPatternsText: result?.patterns ?? null };
 }
 
 export async function getGroup(groupId: string): Promise<ReportGroupDetail> {

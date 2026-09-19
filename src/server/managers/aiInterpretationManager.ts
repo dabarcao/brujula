@@ -34,7 +34,7 @@
 // mirroring the original's own marker-split approach exactly.
 
 import "server-only";
-import { getReportGroupCompetencySummary, getSavedProfileInterpretation as dbGetSavedProfileInterpretation, saveProfileInterpretation as dbSaveProfileInterpretation } from "@/server/db/aiInterpretations";
+import { getReportGroupCompetencySummary, getReportGroupOpenAnswers, getSavedProfileInterpretation as dbGetSavedProfileInterpretation, saveProfileInterpretation as dbSaveProfileInterpretation } from "@/server/db/aiInterpretations";
 import {
   getRequestCompetencyComparison,
   getRequestCompetencyByCategory,
@@ -59,6 +59,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const SABOTEADORES_MARKER = "---SABOTEADORES---";
 const RESPUESTAS_ABIERTAS_MARKER = "---RESPUESTAS_ABIERTAS---";
+const GROUP_PATTERNS_MARKER = "---PATRONES---";
 
 export type AiProfileInterpretationResult = {
   competencias: string;
@@ -266,19 +267,38 @@ export async function getSavedProfileInterpretation(requestId: string) {
   return dbGetSavedProfileInterpretation(requestId);
 }
 
+export type GroupInterpretationResult = {
+  competencias: string;
+  /** Solo presente si el grupo tiene texto abierto que sintetizar (ver más abajo). */
+  patterns: string | null;
+};
+
 /**
  * Interpretación del informe de grupo (spec.md sección 17, "Informes de
- * grupo" -- fase 1) -- se llama una única vez, al cerrar el grupo
+ * grupo") -- se llama una única vez, al cerrar el grupo
  * (reportGroupsManager.closeGroup). Mismo criterio que el perfil
  * individual: si falla o no hay clave, devuelve null sin reintento
  * automático.
+ *
+ * 2 partes en una sola llamada (mismo patrón de marcador que
+ * generateProfileInterpretation): competencias (fase 1, siempre) y,
+ * cuando hay texto abierto disponible, patrones de grupo (2026-09-19) --
+ * 2-3 patrones claros (fortalezas + 1-2 desafíos comunes) para abrir
+ * conversación en el equipo, nunca atribuidos a una persona. La fuente es
+ * el texto abierto EN BRUTO de todos los miembros (get_report_group_open_
+ * answers), no el resumen ya comprimido de cada informe individual --
+ * encadenar un resumen-de-resúmenes perdería justo los patrones que solo
+ * se repiten ENTRE personas distintas.
  */
-export async function generateReportGroupInterpretation(groupId: string): Promise<string | null> {
+export async function generateReportGroupInterpretation(groupId: string): Promise<GroupInterpretationResult | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
   try {
-    const rows = await getReportGroupCompetencySummary(groupId);
+    const [rows, openAnswers] = await Promise.all([
+      getReportGroupCompetencySummary(groupId),
+      getReportGroupOpenAnswers(groupId),
+    ]);
     if (rows.length === 0) return null;
 
     const lines = rows.map(
@@ -286,7 +306,7 @@ export async function generateReportGroupInterpretation(groupId: string): Promis
         `- ${row.competencyName} (${row.roleName || "Plenitud"}): media de evaluadores ${row.peerAvgValue ?? "sin dato"}, media de autopercepción ${row.selfAvgValue ?? "sin dato"}, ${row.memberCount} personas con dato`
     );
 
-    const prompt = `Eres un asistente que ayuda a interpretar el perfil agregado de un grupo dentro de Brújula, una herramienta de feedback anónimo humanista (no de evaluación de desempeño). Cada competencia trae dos medias del grupo (escala 1-5), calculadas a partir del último 360 cerrado de cada miembro: la media de cómo les evalúan sus compañeros, y la media de cómo se autoevalúan ellos mismos — cada persona pesa igual, sin importar cuántos evaluadores tuvo.
+    let prompt = `Eres un asistente que ayuda a interpretar el perfil agregado de un grupo dentro de Brújula, una herramienta de feedback anónimo humanista (no de evaluación de desempeño). Cada competencia trae dos medias del grupo (escala 1-5), calculadas a partir del último 360 cerrado de cada miembro: la media de cómo les evalúan sus compañeros, y la media de cómo se autoevalúan ellos mismos — cada persona pesa igual, sin importar cuántos evaluadores tuvo.
 
 Datos del grupo:
 ${lines.join("\n")}
@@ -298,6 +318,27 @@ Escribe una interpretación en español, en 2ª persona plural ("vuestro equipo"
 
 Tono humanista, cercano, nunca de evaluación de desempeño ni de ranking entre personas — es un perfil de grupo, no de individuos. No uses listas ni encabezados, solo párrafos de texto corrido separados por una línea en blanco.`;
 
+    const openByPrompt = new Map<string, string[]>();
+    for (const row of openAnswers) {
+      if (!openByPrompt.has(row.questionPrompt)) openByPrompt.set(row.questionPrompt, []);
+      openByPrompt.get(row.questionPrompt)!.push(row.answerText);
+    }
+
+    if (openByPrompt.size > 0) {
+      const openLines = Array.from(openByPrompt.entries())
+        .map(([q, answers]) => `Pregunta: "${q}"\n${answers.map((a) => `- ${a}`).join("\n")}`)
+        .join("\n\n");
+      prompt += `
+
+Además, aquí tienes TODO el texto abierto que los compañeros escribieron sobre cada uno de los miembros del grupo en su propio 360 (mezclado, sin indicar de quién es cada comentario ni sobre quién trata):
+${openLines}
+
+Cuando termines la interpretación de competencias de arriba, añade en una línea aparte exactamente el texto "${GROUP_PATTERNS_MARKER}" y, a continuación, identifica 2-3 patrones claros que sirvan como punto de partida para que el equipo hable entre sí:
+- 1-2 fortalezas claras del equipo, a partir de lo que se repite en los comentarios de reconocimiento.
+- 1-2 desafíos o áreas de mejora comunes, a partir de lo que se repite en los comentarios de desafío/consejo.
+Cada patrón, un párrafo corto. Nunca menciones ni describas a una persona concreta, ni siquiera de forma indirecta ("alguien del equipo...") — solo tendencias del equipo en conjunto, redactadas como invitación a conversar, nunca como veredicto ni corrección. No uses negrita, markdown, listas ni encabezados en esta parte tampoco -- solo párrafos de texto corrido, igual que la interpretación de competencias de arriba. Si de verdad no hay ningún patrón que se repita entre varias personas distintas (nunca a partir de un solo comentario aislado), no escribas ni el marcador ni esta parte.`;
+    }
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -307,7 +348,7 @@ Tono humanista, cercano, nunca de evaluación de desempeño ni de ranking entre 
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
+        max_tokens: 1536,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -319,7 +360,16 @@ Tono humanista, cercano, nunca de evaluación de desempeño ni de ranking entre 
 
     const responseData = await res.json();
     const text = (responseData?.content?.[0]?.text as string | undefined)?.trim();
-    return text || null;
+    if (!text) return null;
+
+    if (text.includes(GROUP_PATTERNS_MARKER)) {
+      const [before, after] = text.split(GROUP_PATTERNS_MARKER);
+      const competencias = before.trim();
+      const patterns = after.trim() || null;
+      return competencias ? { competencias, patterns } : null;
+    }
+
+    return { competencias: text, patterns: null };
   } catch (e) {
     console.error("No se pudo generar la interpretación IA del grupo:", e);
     return null;

@@ -101,6 +101,7 @@ export default async function ReportGroupPage({
     }
   }
   const aiInterpretation = group.aiInterpretation;
+  const aiOpenPatternsText = group.aiOpenPatternsText;
 
   // Igual que el comparativo individual (sección 9): la media de los
   // evaluadores como gajo de color, la media de la propia
@@ -233,6 +234,13 @@ export default async function ReportGroupPage({
         </Card>
       ) : (
         <>
+          <a
+            href={`/api/groups/${id}/pdf`}
+            className="inline-block text-sm underline text-ink-soft hover:text-ink mb-6"
+          >
+            Descargar informe en PDF
+          </a>
+
           {aiInterpretation && (
             <Card className="mb-8">
               <p className="text-xs font-semibold text-ink-soft mb-2">
@@ -241,6 +249,18 @@ export default async function ReportGroupPage({
               </p>
               <div className="text-sm text-ink flex flex-col gap-3 whitespace-pre-line">
                 {aiInterpretation}
+              </div>
+            </Card>
+          )}
+
+          {aiOpenPatternsText && (
+            <Card className="mb-8">
+              <p className="text-xs font-semibold text-ink-soft mb-2">
+                Patrones para conversar{" "}
+                <span className="font-normal text-ink-soft">(generado por IA)</span>
+              </p>
+              <div className="text-sm text-ink flex flex-col gap-3 whitespace-pre-line">
+                {aiOpenPatternsText}
               </div>
             </Card>
           )}

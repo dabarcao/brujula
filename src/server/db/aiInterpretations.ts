@@ -24,17 +24,29 @@
 
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { getReportGroupCompetencySummary } from "@/server/db/reportGroups";
+import { getReportGroupCompetencySummary, getReportGroupOpenAnswers } from "@/server/db/reportGroups";
 
-export type { ReportGroupCompetencySummaryRow } from "@/server/db/reportGroups";
-export { getReportGroupCompetencySummary };
+export type { ReportGroupCompetencySummaryRow, ReportGroupOpenAnswerRow } from "@/server/db/reportGroups";
+export { getReportGroupCompetencySummary, getReportGroupOpenAnswers };
 
-/** Wraps `save_report_group_interpretation`. Throws the RPC's own message on failure. */
-export async function saveReportGroupInterpretation(groupId: string, text: string): Promise<void> {
+/**
+ * Wraps `save_report_group_interpretation`. `openPatternsText` is optional
+ * (0106_report_group_open_patterns.sql's `p_open_patterns_text` default
+ * null keeps it a no-op on the stored column when omitted -- e.g. a group
+ * whose open-text corpus was empty, generateReportGroupInterpretation
+ * never asked the model for a patterns section at all). Throws the RPC's
+ * own message on failure.
+ */
+export async function saveReportGroupInterpretation(
+  groupId: string,
+  text: string,
+  openPatternsText?: string | null
+): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("save_report_group_interpretation", {
     p_group_id: groupId,
     p_text: text,
+    p_open_patterns_text: openPatternsText ?? null,
   });
   if (error) throw new Error(error.message);
 }

@@ -34,6 +34,9 @@ export type ReportGroupDetail = {
   // sees null here even though the row is otherwise visible (see the RPC's
   // own comment, supabase/migrations/0064_report_groups.sql).
   aiInterpretation: string | null;
+  // Mismo criterio de visibilidad que aiInterpretation (solo creador/
+  // aceptado) -- get_report_group (0106_report_group_open_patterns.sql).
+  aiOpenPatternsText: string | null;
   members: ReportGroupMember[];
   // -- Computed fields below: business logic that used to be recomputed by
   // hand in src/app/dashboard/groups/[id]/page.tsx from the raw fields
@@ -135,6 +138,7 @@ type RawReportGroupDetail = {
   is_creator: boolean;
   my_status: ReportGroupMemberStatus | null;
   ai_interpretation: string | null;
+  ai_open_patterns_text: string | null;
   members: {
     member_id: string;
     full_name: string | null;
@@ -313,6 +317,7 @@ export async function getReportGroup(groupId: string): Promise<ReportGroupDetail
     isCreator: raw.is_creator,
     myStatus: raw.my_status,
     aiInterpretation: raw.ai_interpretation,
+    aiOpenPatternsText: raw.ai_open_patterns_text,
     members: raw.members.map((m) => ({
       memberId: m.member_id,
       fullName: m.full_name,
@@ -350,6 +355,41 @@ export async function getReportGroupCompetencySummary(
     peerAvgValue: row.peer_avg_value,
     selfAvgValue: row.self_avg_value,
     memberCount: row.member_count,
+  }));
+}
+
+export type ReportGroupOpenAnswerRow = {
+  questionPrompt: string;
+  questionPosition: number;
+  answerText: string;
+};
+
+type RawReportGroupOpenAnswerRow = {
+  question_prompt: string;
+  question_position: number;
+  answer_text: string;
+};
+
+/**
+ * Wraps `get_report_group_open_answers` (0106_report_group_open_patterns.sql).
+ * Texto abierto EN BRUTO (is_self=false) del último 360 cerrado de cada
+ * miembro aceptado -- fuente para la síntesis de patrones de grupo
+ * (aiInterpretationManager.generateReportGroupInterpretation), nunca
+ * mostrado tal cual en ninguna pantalla. Throws the RPC's own message on
+ * failure (mismos permisos que getReportGroupCompetencySummary).
+ */
+export async function getReportGroupOpenAnswers(groupId: string): Promise<ReportGroupOpenAnswerRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_report_group_open_answers", {
+    p_group_id: groupId,
+  });
+  if (error) throw new Error(error.message);
+
+  const rows = (data as RawReportGroupOpenAnswerRow[] | null) || [];
+  return rows.map((row) => ({
+    questionPrompt: row.question_prompt,
+    questionPosition: row.question_position,
+    answerText: row.answer_text,
   }));
 }
 
