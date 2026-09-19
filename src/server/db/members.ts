@@ -122,6 +122,7 @@ export async function claimPendingEmailInvitations(): Promise<void> {
 
 export type CurrentMember = {
   id: string;
+  fullName: string | null;
   isSupervisor: boolean;
   isGuest: boolean;
   organizationId: string;
@@ -159,7 +160,7 @@ export async function getCurrentMember(): Promise<CurrentMember | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("members")
-    .select("id, is_supervisor, is_guest, organization_id, status, organizations(name, kind)")
+    .select("id, full_name, is_supervisor, is_guest, organization_id, status, organizations(name, kind)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -168,6 +169,7 @@ export async function getCurrentMember(): Promise<CurrentMember | null> {
   const org = data.organizations as unknown as { name: string; kind: string } | null;
   return {
     id: data.id as string,
+    fullName: data.full_name as string | null,
     isSupervisor: data.is_supervisor as boolean,
     isGuest: data.is_guest as boolean,
     organizationId: data.organization_id as string,

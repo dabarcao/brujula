@@ -132,6 +132,7 @@ export default async function DashboardPage() {
         const created = await createIndividualAccount(fullName, user.email || "");
         member = {
           id: created.memberId,
+          fullName,
           isSupervisor: created.isSupervisor,
           // create_individual_account never creates an Invitado -- the
           // individual-account flow always makes its one member the

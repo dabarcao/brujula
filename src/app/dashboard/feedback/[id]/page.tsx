@@ -56,18 +56,24 @@ async function loadQuestionGroups(requestId: string, isSelf: boolean): Promise<Q
 
 function QuestionGroupList({ groups }: { groups: QuestionGroup[] }) {
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-4">
       {groups.map((group) => (
-        <div key={group.prompt}>
-          <h3 className="text-sm font-semibold text-ink mb-3">{group.prompt}</h3>
-          <div className="flex flex-col gap-3">
+        <details key={group.prompt} className="group">
+          <summary className="flex items-center justify-between gap-3 cursor-pointer list-none text-sm font-semibold text-ink">
+            <span>{group.prompt}</span>
+            <span className="text-xs font-normal text-ink-soft shrink-0">
+              {group.answers.length === 1 ? "1 respuesta" : `${group.answers.length} respuestas`}{" "}
+              <span className="inline-block transition-transform group-open:rotate-180">▾</span>
+            </span>
+          </summary>
+          <div className="flex flex-col gap-3 mt-3">
             {group.answers.map((answer, index) => (
               <p key={index} className="text-sm text-ink-soft">
                 {answer}
               </p>
             ))}
           </div>
-        </div>
+        </details>
       ))}
     </div>
   );
@@ -536,6 +542,14 @@ export default async function FeedbackRequestPage({
             )}
             {isCycle && isFinal && cycleClosesAt && (
               <p className="text-xs text-ink-soft mb-4">Cerrado el {cycleClosesAt}.</p>
+            )}
+            {isCycle && showRestrictedContent && (
+              <a
+                href={`/api/feedback/${id}/pdf`}
+                className="inline-block text-sm underline text-ink-soft hover:text-ink mb-6"
+              >
+                Descargar informe en PDF
+              </a>
             )}
             {isCycle && showRestrictedContent && savedInterpretation?.competencias && (
               <Card className="mb-8 max-w-prose">
