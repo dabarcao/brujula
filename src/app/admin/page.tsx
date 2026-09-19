@@ -120,6 +120,9 @@ export default async function AdminPage({
         <span className="text-ink-soft" title="Todavía no disponible">
           Competencias
         </span>
+        <Link href="/admin/gestion" className="text-ink-soft hover:text-ink hover:underline">
+          Gestión Brújula
+        </Link>
       </div>
 
       {inviteUrl && (

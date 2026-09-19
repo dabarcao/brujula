@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { updateOrganizationName } from "@/app/actions/admin";
+import { updateOrganizationName, updateMemberAsAdmin } from "@/app/actions/admin";
 import { signOut } from "@/app/actions/auth";
 import Card from "@/components/ui/Card";
 import AggregateBadge from "@/components/ui/AggregateBadge";
@@ -29,10 +29,10 @@ export default async function AdminOrganizationMembersPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; updated?: string }>;
+  searchParams: Promise<{ error?: string; updated?: string; memberUpdated?: string }>;
 }) {
   const { id } = await params;
-  const { error, updated } = await searchParams;
+  const { error, updated, memberUpdated } = await searchParams;
   const supabase = await createClient();
 
   const {
@@ -76,6 +76,12 @@ export default async function AdminOrganizationMembersPage({
       {updated && (
         <div className="mb-6 rounded-brujula-md bg-indigo-wash text-ink text-sm p-3">
           Empresa actualizada.
+        </div>
+      )}
+
+      {memberUpdated && (
+        <div className="mb-6 rounded-brujula-md bg-indigo-wash text-ink text-sm p-3">
+          Empleado actualizado.
         </div>
       )}
 
@@ -137,6 +143,34 @@ export default async function AdminOrganizationMembersPage({
                     {member.status === "active" ? "activo" : "invitado"}
                   </span>
                 </div>
+
+                <details>
+                  <summary className="text-xs underline text-ink-soft cursor-pointer">
+                    Editar nombre / email
+                  </summary>
+                  <form
+                    action={updateMemberAsAdmin}
+                    className="flex flex-col gap-2 mt-2"
+                  >
+                    <input type="hidden" name="memberId" value={member.id} />
+                    <input type="hidden" name="orgId" value={id} />
+                    <input
+                      name="fullName"
+                      defaultValue={member.full_name || ""}
+                      placeholder="Nombre completo"
+                      className="border border-line rounded-brujula-sm px-2 py-1 text-sm bg-paper-deep text-ink"
+                    />
+                    <input
+                      name="email"
+                      defaultValue={member.email}
+                      placeholder="Email"
+                      className="border border-line rounded-brujula-sm px-2 py-1 text-sm bg-paper-deep text-ink"
+                    />
+                    <ButtonPrimary type="submit" className="px-3 py-1.5 text-sm self-start">
+                      Guardar
+                    </ButtonPrimary>
+                  </form>
+                </details>
               </Card>
             ))}
           </div>
