@@ -86,7 +86,13 @@ export async function signIn(formData: FormData) {
   const cookieStore = await cookies();
   cookieStore.set(APP_TOKEN_COOKIE, appToken, {
     httpOnly: true,
-    secure: true,
+    // `secure: true` a fuego se descartaba en local sobre HTTP en
+    // navegadores que no hacen la excepción especial de Chrome para
+    // "localhost" (Firefox/Safari, o incluso Chrome si se entra por
+    // 127.0.0.1 en vez de localhost) -- la cookie nunca se guardaba, y
+    // cualquier ruta bajo requireApiToken() (src/server/shared/auth.ts)
+    // fallaba con 401 sin que signIn ni el login fallaran visiblemente.
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: APP_TOKEN_TTL_SECONDS,
